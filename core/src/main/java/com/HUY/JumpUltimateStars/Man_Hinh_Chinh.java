@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.ScreenUtils;
 
@@ -36,10 +37,10 @@ public class Man_Hinh_Chinh implements Screen {
 
     // Danh sach cac lua chon trong menu, thu tu 0..3
     private final String[] menuItems = {
-        "CHOI TIEP",
-        "CHOI MOI",
+        "CHƠI TIẾP",
+        "CHƠI MỚI",
         "SETTING",
-        "THOAT"
+        "THOÁT"
     };
 
     /*
@@ -90,7 +91,38 @@ public class Man_Hinh_Chinh implements Screen {
         camera = new OrthographicCamera();
         camera.setToOrtho(false, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
-        font = new BitmapFont();
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("font_chinh.ttf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+
+        parameter.characters =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                + "abcdefghijklmnopqrstuvwxyz"
+                + "0123456789"
+                + " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+                + "ÀÁÂÃÈÉÊẾÌÍÒÓÔÕÙÚĂĐĨŨƠƯ"
+                + "àáâãèéêìíòóôõùúăđĩũơư"
+                + "ẠẢẤẦẨẪẬẮẰẲẴẶ"
+                + "ạảấầẩẫậắằẳẵặ"
+                + "ẸẺẼỀỂỄỆ"
+                + "ẹẻẽềểễệ"
+                + "ỈỊỌỎỐỒỔỖỘỚỜỞỠỢ"
+                + "ỉịọỏốồổỗộớờởỡợ"
+                + "ỤỦỨỪỬỮỰỲỶỸỴ"
+                + "ụủứừửữựỳỷỹỵ";
+
+        // Kích thước chữ
+        parameter.size = 25;
+
+        //  Màu chữ bên trong
+        parameter.color = Color.WHITE;
+
+        // Viền đen
+        parameter.borderWidth = 3;
+        parameter.borderColor = Color.BLACK;
+
+        font = generator.generateFont(parameter);
+
+        generator.dispose();
         layout = new GlyphLayout();
 
         centerX = Gdx.graphics.getWidth() / 2f;
@@ -165,7 +197,7 @@ public class Man_Hinh_Chinh implements Screen {
      * He so 10f la toc do "bat kip" - so cang lon thi cuon cang nhanh.
      */
     private void updateAnimation(float delta) {
-        scrollPosition = MathUtils.lerp(scrollPosition, targetPosition, 10f * delta);
+        scrollPosition = MathUtils.lerp(scrollPosition, targetPosition, 5f * delta);
     }
 
     /* ========================= RENDER MENU ========================= */
