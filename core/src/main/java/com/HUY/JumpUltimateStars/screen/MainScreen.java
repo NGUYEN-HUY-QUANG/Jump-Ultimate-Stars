@@ -1,5 +1,6 @@
-package com.HUY.JumpUltimateStars;
+package com.HUY.JumpUltimateStars.screen;
 
+import com.HUY.JumpUltimateStars.hethong.MainGame;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
@@ -21,7 +22,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
  *  2. Menu: danh sach lua chon dang cuon vong tron (infinite scroll),
  *     dieu khien bang phim UP / DOWN / ENTER.
  */
-public class Man_Hinh_Chinh implements Screen {
+public class MainScreen implements Screen {
 
     // Tham chieu nguoc ve game chinh, dung de chuyen man hinh (setScreen)
     private final MainGame game;
@@ -37,9 +38,10 @@ public class Man_Hinh_Chinh implements Screen {
 
     // Danh sach cac lua chon trong menu, thu tu 0..3
     private final String[] menuItems = {
-        "CHƠI TIẾP",
-        "CHƠI MỚI",
-        "SETTING",
+        "PVP",
+        "PVE",
+        "VƯỢT ẢI",
+        "LUYỆN TẬP",
         "THOÁT"
     };
 
@@ -75,7 +77,7 @@ public class Man_Hinh_Chinh implements Screen {
     // trong vong lap renderMenu() gay rac (garbage) khong can thiet
     private final Color tmpColor = new Color();
 
-    public Man_Hinh_Chinh(MainGame game) {
+    public MainScreen(MainGame game) {
         this.game = game;
     }
 
@@ -85,7 +87,7 @@ public class Man_Hinh_Chinh implements Screen {
      */
     @Override
     public void show() {
-        backgroundTexture = new Texture("man_hinh_chinh.jpg");
+        backgroundTexture = new Texture("background/main_screen.jpg");
         batch = new SpriteBatch();
 
         camera = new OrthographicCamera();
@@ -166,15 +168,15 @@ public class Man_Hinh_Chinh implements Screen {
      * khong lap lai lien tuc neu giu phim (khac voi isKeyPressed).
      */
     private void handleInput() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.S)) {
             moveDown();
         }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.W)) {
             moveUp();
         }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.J)) {
             selectItem();
         }
     }
@@ -329,7 +331,7 @@ public class Man_Hinh_Chinh implements Screen {
     /* ========================= CHON MENU ========================= */
 
     /**
-     * Duoc goi khi nguoi choi bam ENTER.
+     * Duoc goi khi nguoi choi bam J.
      * Lay dung index cua item dang duoc chon (dua theo targetPosition,
      * TUC LA y dinh cua nguoi choi, khong phai scrollPosition dang
      * chay animation do dang).
@@ -339,21 +341,26 @@ public class Man_Hinh_Chinh implements Screen {
 
         switch (index) {
             case 0:
-                System.out.println("CHON CHOI TIEP");
-                // TODO: game.setScreen(new ManHinhChoiTiep(game));
+                System.out.println("CHON PVP");
+                // TODO: game.setScreen(new ManHinhPVP(game));
                 break;
 
             case 1:
-                System.out.println("CHON CHOI MOI");
-                // TODO: game.setScreen(new ManHinhChoiMoi(game));
+                System.out.println("CHON PVE");
+                // TODO: game.setScreen(new ManHinhPVE(game));
                 break;
 
             case 2:
-                System.out.println("CHON SETTING");
-                // TODO: game.setScreen(new ManHinhSetting(game));
+                System.out.println("CHON VƯỢT ẢI");
+                // TODO: game.setScreen(new ManHinhVuotAi(game));
                 break;
 
             case 3:
+                System.out.println("CHON LUYỆN TẬP");
+                game.setScreen(new CharacterSelectScreen(game));
+                break;
+
+            case 4:
                 System.out.println("CHON THOAT");
                 Gdx.app.exit();
                 break;

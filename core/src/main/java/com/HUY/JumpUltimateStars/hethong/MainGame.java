@@ -1,5 +1,6 @@
-package com.HUY.JumpUltimateStars;
+package com.HUY.JumpUltimateStars.hethong;
 
+import com.HUY.JumpUltimateStars.screen.MainScreen;
 import com.badlogic.gdx.Game;
 
 public class MainGame extends Game {
@@ -9,7 +10,7 @@ public class MainGame extends Game {
 
     @Override
     public void create() {
-        setScreen(new Man_Hinh_Chinh(this));
+        setScreen(new MainScreen(this));
     }
 
     @Override
