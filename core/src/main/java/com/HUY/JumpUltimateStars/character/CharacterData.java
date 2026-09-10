@@ -2,11 +2,24 @@ package com.HUY.JumpUltimateStars.character;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
+/**
+ * Class dữ liệu (data holder) đại diện cho thông tin của 1 nhân vật
+ * trong game. Hiện tại chỉ lưu id và avatar, nhưng sẽ được mở rộng
+ * thêm animation, chỉ số, v.v. trong tương lai.
+ *
+ * Đây là kiểu immutable đơn giản (các field là final), dùng để truyền
+ * dữ liệu nhân vật cho các thành phần UI như CharacterSlot render ra.
+ */
 public class CharacterData {
 
+    // Định danh duy nhất của nhân vật (dùng để so sánh, tìm kiếm, lưu save...).
     public final String id;
+
+    // Ảnh đại diện (avatar) của nhân vật, dùng để vẽ trong slot chọn nhân vật.
     public final TextureRegion avatar;
+
     // sau này thêm: Animation<TextureRegion> idleAnimation;
+    // (animation đứng yên/idle của nhân vật, sẽ bổ sung khi cần hiệu ứng động)
 
     public CharacterData(String id, TextureRegion avatar) {
         this.id = id;
