@@ -342,22 +342,23 @@ public class MainScreen implements Screen {
         switch (index) {
             case 0:
                 System.out.println("CHON PVP");
-                // TODO: game.setScreen(new ManHinhPVP(game));
+                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.DUO));
                 break;
 
             case 1:
                 System.out.println("CHON PVE");
-                // TODO: game.setScreen(new ManHinhPVE(game));
+                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.SINGLE));
                 break;
 
             case 2:
                 System.out.println("CHON VƯỢT ẢI");
-                // TODO: game.setScreen(new ManHinhVuotAi(game));
+                // TODO: sau nay se la new CharacterSelectScreen(game, CharacterSelectScreen.Mode.SINGLE)
+                // roi chuyen tiep sang man hinh gameplay rieng cho Vuot Ai, khac voi PVE/Luyen tap
                 break;
 
             case 3:
                 System.out.println("CHON LUYỆN TẬP");
-                game.setScreen(new CharacterSelectScreen(game));
+                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.SINGLE));
                 break;
 
             case 4:
