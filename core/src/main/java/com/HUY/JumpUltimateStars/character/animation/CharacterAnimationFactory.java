@@ -45,7 +45,7 @@ public class CharacterAnimationFactory {
     public Animation<TextureRegion> load(String charId, String action, float frameDuration,
                                          Animation.PlayMode playMode) {
         // Mảng chứa các frame (TextureRegion) sẽ được load tuần tự
-        Array<TextureRegion> frames = new Array<>();
+        Array<TextureRegion> frames = new Array<>(TextureRegion.class);
 
         // Bắt đầu từ frame số 0, load liên tục cho tới khi không còn file
         int i = 0;
@@ -80,7 +80,7 @@ public class CharacterAnimationFactory {
 
         // Tạo đối tượng Animation từ danh sách frame vừa load,
         // với thời gian hiển thị mỗi frame là frameDuration
-        Animation<TextureRegion> anim = new Animation<>(frameDuration, frames);
+        Animation<TextureRegion> anim = new Animation<>(frameDuration, frames, playMode);
 
         // Thiết lập chế độ chạy (loop, chạy 1 lần, đảo ngược, ...)
         anim.setPlayMode(playMode);

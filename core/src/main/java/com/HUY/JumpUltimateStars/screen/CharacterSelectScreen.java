@@ -5,6 +5,7 @@ import com.HUY.JumpUltimateStars.character.CharacterRegistry;
 import com.HUY.JumpUltimateStars.character.animation.CharacterAnimationManager;
 import com.HUY.JumpUltimateStars.hethong.MainGame;
 import com.HUY.JumpUltimateStars.hethong.PlayerSelector;
+import com.HUY.JumpUltimateStars.map.MapRegistry;
 import com.HUY.JumpUltimateStars.ui.CharacterSlot;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input.Keys;
@@ -192,7 +193,10 @@ public class CharacterSelectScreen implements Screen {
                 p.refreshPreview(slots);
                 repositionPreviews();
             }
-            if (p.isConfirmPressed()) {
+            if (p.isConfirmPressed() && !p.isLocked()) {
+                p.startConfirm();
+                // Slot chỉ để hiển thị hiệu ứng. Nếu slot đã đang nhấp nháy/đỏ
+                // (do người kia confirm trước) thì giữ nguyên, không reset.
                 CharacterSlot slot = slots.get(p.getIndex());
                 if (slot.getState() != CharacterSlot.State.CONFIRMING
                     && slot.getState() != CharacterSlot.State.CONFIRMED) {
@@ -228,15 +232,16 @@ public class CharacterSelectScreen implements Screen {
      * -> CONFIRMED sau FLASH_DURATION giay (xem CharacterSlot.update()),
      * nen chi can doc state la du, khong can tu quan ly timer o day.
      */
-    private void checkAllConfirmed() {
+    private boolean checkAllConfirmed() {
         for (PlayerSelector p : players) {
-            if (slots.get(p.getIndex()).getState() != CharacterSlot.State.CONFIRMED) {
-                return;
-            }
+            if (!p.isConfirmed()) return false;
         }
-        // TODO: tat ca da confirm -> chuyen sang man hinh gameplay
-        // game.setScreen(new GameScreen(game, mode, p1.getIndex(),
-        //     p2 != null ? p2.getIndex() : -1));
+        String p1Id = slots.get(p1.getIndex()).getData().id;
+        String p2Id = (p2 != null) ? slots.get(p2.getIndex()).getData().id : null;
+
+        game.setScreen(new GameScreen(game, mode, p1Id, p2Id, MapRegistry.ALL.get(0)));
+        dispose();
+        return true;
     }
 
     /* ========================= RENDER ========================= */
@@ -250,7 +255,7 @@ public class CharacterSelectScreen implements Screen {
         for (CharacterSlot s : slots) s.update(delta);
         for (PlayerSelector p : players) p.update(delta);
 
-        checkAllConfirmed();
+        if (checkAllConfirmed()) return;
 
         ScreenUtils.clear(0f, 0f, 0f, 1f);
         camera.update();

@@ -50,6 +50,12 @@ public class PlayerSelector {
     // Preview nhan vat dang duoc chon, hien o cot trai (P1) hoac phai (P2)
     private Character preview;
 
+    private static final float CONFIRM_DURATION = 1f; // khớp FLASH_DURATION của CharacterSlot
+
+    private boolean locked = false;     // đã bấm confirm (đang nhấp nháy hoặc xong)
+    private boolean confirmed = false;  // đã confirm xong hẳn
+    private float confirmTimer = 0f;
+
     public PlayerSelector(Id id, Color color, int keyLeft, int keyRight, int keyConfirm,
                           boolean flipPreview, float offsetX,
                           CharacterAnimationManager animManager) {
@@ -73,11 +79,7 @@ public class PlayerSelector {
      * nen de CharacterSelectScreen dieu phoi.
      */
     public boolean handleMove(List<CharacterSlot> slots) {
-        CharacterSlot current = slots.get(index);
-        if (current.getState() == CharacterSlot.State.CONFIRMING
-            || current.getState() == CharacterSlot.State.CONFIRMED) {
-            return false;
-        }
+        if (locked) return false; // đã confirm thì không đổi nhân vật nữa
 
         int newIndex = index;
         if (Gdx.input.isKeyJustPressed(keyLeft)) newIndex--;
@@ -92,6 +94,16 @@ public class PlayerSelector {
     public boolean isConfirmPressed() {
         return Gdx.input.isKeyJustPressed(keyConfirm);
     }
+
+    /** Bắt đầu confirm cho riêng người chơi này. */
+    public void startConfirm() {
+        if (locked) return;
+        locked = true;
+        confirmTimer = 0f;
+    }
+
+    public boolean isLocked() { return locked; }
+    public boolean isConfirmed() { return confirmed; }
 
     /** Tao lai Character preview theo nhan vat dang duoc tro toi (index hien tai). */
     public void refreshPreview(List<CharacterSlot> slots) {
@@ -111,6 +123,10 @@ public class PlayerSelector {
 
     public void update(float delta) {
         if (preview != null) preview.update(delta);
+        if (locked && !confirmed) {
+            confirmTimer += delta;
+            if (confirmTimer >= CONFIRM_DURATION) confirmed = true;
+        }
     }
 
     public void draw(SpriteBatch batch) {
