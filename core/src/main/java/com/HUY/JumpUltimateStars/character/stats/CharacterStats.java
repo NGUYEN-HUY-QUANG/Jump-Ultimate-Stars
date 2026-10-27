@@ -6,4 +6,5 @@ public abstract class CharacterStats {
     public float moveSpeed = 450f; // pixel / giây
     public float scale = 2.0f;     // độ lớn nhân vật trong map
     public int maxHp = 1000;
+    public Move[] moves = {};   // <-- THÊM: nhân vật không có đòn thì để rỗng
 }
