@@ -4,6 +4,9 @@ import com.HUY.JumpUltimateStars.character.animation.CharacterAnimationManager;
 import com.HUY.JumpUltimateStars.character.stats.CharacterStats;
 import com.HUY.JumpUltimateStars.character.stats.CharacterStatsRegistry;
 import com.HUY.JumpUltimateStars.character.stats.Move;
+import com.HUY.JumpUltimateStars.character.stats.Skill;
+import com.HUY.JumpUltimateStars.effect.EffectManager;
+import com.HUY.JumpUltimateStars.effect.ProjectileSpec;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -14,14 +17,18 @@ import com.badlogic.gdx.math.MathUtils;
  *
  * Ghép các thành phần lại với nhau:
  *  - Character:        lo animation + vẽ sprite (không biết gì về input hay đòn đánh)
- *  - PlayerController: đọc phím của người chơi (di chuyển, tấn công, nhảy, lướt)
- *  - CharacterStats:   chỉ số cố định của nhân vật (tốc độ, nhảy, lướt, scale, máu, danh sách đòn Move[])
+ *  - PlayerController: đọc phím của người chơi (di chuyển, tấn công, nhảy, lướt, skill U)
+ *  - CharacterStats:   chỉ số cố định của nhân vật (tốc độ, nhảy, lướt, scale, máu, Move[], skillU)
+ *  - EffectManager:    nơi sinh ra effect (phi tiêu...) khi skill tới frame spawn
  *
  * Fighter giữ vị trí (centerX, groundY, airY), hướng mặt và một state machine:
  *
  *   FREE ──bấm J──> ATTACK ──hết animation──> RECOVERY ──hết giờ──> FREE
  *                     ^                           |
  *                     └────── bấm J (nối đòn) ────┘  (chỉ khi chưa phải đòn cuối)
+ *
+ *   FREE / RECOVERY / LAND / ATTACK(sau frame gây dame + vài frame) ──bấm U──> SKILL ──hết animation──> FREE
+ *   (đánh thường KHÔNG ngắt được skill)
  *
  *   FREE / RECOVERY / LAND ──bấm K──> AIR ──chạm đất──> LAND ──hết animation──> FREE
  *                                      |
@@ -46,20 +53,23 @@ public class Fighter {
     private static final float FALL_FRAME_DURATION = 0.08f;
     private static final float LAND_FRAME_DURATION = 0.06f;
 
-    // Chỉ dùng để preload và đếm số frame của dash. Thời gian chạy thật của animation dash
-    // được tính lại từ stats.dashDuration trong startDash().
+    // Chỉ dùng để preload và đếm số frame của dash. Thời gian chạy thật tính lại trong startDash().
     private static final float DASH_FRAME_DURATION = 0.05f;
+
+    // Skill U chỉ ngắt được đòn thường sau frame gây dame bao nhiêu frame. 0 = ngắt ngay frame gây dame.
+    private static final int SKILL_CANCEL_DELAY_FRAMES = 3;
 
     // ===================== STATE MACHINE =====================
 
-    // FREE     = tự do di chuyển, sẵn sàng đánh / nhảy / lướt
-    // ATTACK   = đang chạy animation của 1 đòn, không di chuyển được
-    // RECOVERY = animation đòn đã xong, đang nghỉ: vẫn đi lại / nhảy / lướt được,
-    //            nhưng đánh tiếp chỉ được nếu chưa phải đòn cuối
-    // AIR      = đang trên không (bay lên hoặc rơi): đi ngang, nhảy kép, lướt được; chưa đánh được
-    // LAND     = animation chạm đất, không khóa: đánh / nhảy / lướt / đi đều hủy được ngay
-    // DASH     = đang lướt: khóa cứng, không đọc input cho đến khi hết dashDuration
-    private enum State { FREE, ATTACK, RECOVERY, AIR, LAND, DASH }
+    // FREE     = tự do di chuyển, sẵn sàng đánh / nhảy / lướt / skill
+    // ATTACK   = đang chạy animation của 1 đòn; sau frame gây dame + vài frame thì skill U ngắt được
+    // RECOVERY = animation đòn đã xong, đang nghỉ: đi lại / nhảy / lướt / skill được,
+    //            đánh tiếp chỉ được nếu chưa phải đòn cuối
+    // AIR      = đang trên không: đi ngang, nhảy kép, lướt được; chưa đánh / skill được
+    // LAND     = animation chạm đất, không khóa: đánh / skill / nhảy / lướt / đi đều hủy được ngay
+    // DASH     = đang lướt: khóa cứng
+    // SKILL    = đang tung skill: khóa cứng, đánh thường không ngắt được
+    private enum State { FREE, ATTACK, RECOVERY, AIR, LAND, DASH, SKILL }
 
     // ===================== CÁC THÀNH PHẦN =====================
 
@@ -72,8 +82,13 @@ public class Fighter {
     // Chỉ số cố định, dùng chung giữa các Fighter cùng nhân vật (không ghi dữ liệu trong trận vào đây)
     private final CharacterStats stats;
 
-    // Dùng để lấy animation đòn đánh và đếm số frame
+    // Cache animation dùng chung (GameScreen sở hữu). Fighter dùng để lấy animation và đếm số frame
     private final CharacterAnimationManager animManager;
+
+    // Nơi sinh effect (phi tiêu...), dùng chung, GameScreen sở hữu (không dispose ở đây)
+    private final EffectManager effects;
+
+    // Id nhân vật, dùng tra animation / stats
     private final String charId;
 
     // Danh sách đòn thường theo thứ tự combo (phần tử cuối là đòn kết)
@@ -81,7 +96,7 @@ public class Fighter {
 
     // ===================== VỊ TRÍ & HƯỚNG MẶT =====================
 
-    // Vị trí: centerX là tâm ngang, groundY là mặt đất (chân nhân vật)
+    // centerX là tâm ngang, groundY là mặt đất (chân nhân vật)
     private float centerX;
     private float groundY;
 
@@ -97,7 +112,17 @@ public class Fighter {
     private float stateTime;      // thời gian đã trôi qua kể từ khi đòn bắt đầu (giây)
     private float recoveryTimer;  // thời gian nghỉ còn lại ở RECOVERY (giây)
     private boolean buffered;     // đã bấm J trong lúc đang đánh -> tự nối đòn kế khi hết animation
-    private boolean hitDone;      // đòn hiện tại đã gây dame chưa (đảm bảo chỉ gây 1 lần)
+    private boolean skillBuffered;// đã bấm U trong lúc đang đánh -> ra skill khi tới cancelFrame
+    private boolean hitDone;      // đòn hiện tại đã gây dame chưa (chỉ 1 lần)
+
+    // ===================== TRẠNG THÁI SKILL =====================
+
+    private Skill skill;            // skill đang chạy
+    private int skillFrameCount;    // số frame animation của skill
+    private float skillTime;        // thời gian đã chạy của skill (giây)
+    private int skillNextHit;       // chỉ số hitFrames kế tiếp chưa gây dame (con trỏ, chống gây lặp)
+    private boolean skillSpawned;   // đã sinh effect chưa (đảm bảo chỉ sinh 1 lần)
+    private float skillCooldown;    // nghỉ còn lại trước khi dùng lại skill U (giây)
 
     // ===================== TRẠNG THÁI NHẢY / CHẠM ĐẤT =====================
 
@@ -116,14 +141,16 @@ public class Fighter {
 
     /**
      * @param animManager   manager animation dùng chung (Fighter không sở hữu, không dispose)
+     * @param effects       manager effect dùng chung (Fighter không sở hữu, không dispose)
      * @param charId        id nhân vật, dùng để tra stats và tìm thư mục ảnh
      * @param controller    bộ đọc phím của người chơi này
      * @param startCenterX  tâm ngang lúc xuất hiện (pixel)
      * @param facingLeft    hướng mặt ban đầu
      */
-    public Fighter(CharacterAnimationManager animManager, String charId,
+    public Fighter(CharacterAnimationManager animManager, EffectManager effects, String charId,
                    PlayerController controller, float startCenterX, boolean facingLeft) {
         this.animManager = animManager;
+        this.effects = effects;
         this.charId = charId;
         this.controller = controller;
         this.stats = CharacterStatsRegistry.get(charId);
@@ -142,13 +169,16 @@ public class Fighter {
         character.setScale(stats.scale);
         character.playAnimation("idle", IDLE_FRAME_DURATION);
 
-        // Load sẵn animation nhảy/rơi/chạm đất/lướt vì cùng lý do cache ở trên.
-        // jump, land, dash chạy 1 lần (NORMAL); fall lặp (LOOP) cho tới khi chạm đất.
-        // Thiếu asset (jump_*, fall_*, land_*, dash_*) của nhân vật nào thì lỗi ngay lúc vào trận.
+        // Load sẵn animation nhảy/rơi/chạm đất/lướt/skill vì cùng lý do cache ở trên.
+        // jump, land, dash, skill chạy 1 lần (NORMAL); fall lặp (LOOP) cho tới khi chạm đất.
+        // Thiếu asset (jump_*, fall_*, land_*, dash_*, U_*) thì lỗi ngay lúc vào trận.
         animManager.get(charId, "jump", JUMP_FRAME_DURATION, Animation.PlayMode.NORMAL);
         animManager.get(charId, "fall", FALL_FRAME_DURATION, Animation.PlayMode.LOOP);
         animManager.get(charId, "land", LAND_FRAME_DURATION, Animation.PlayMode.NORMAL);
         animManager.get(charId, "dash", DASH_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        if (stats.skillU != null) {
+            animManager.get(charId, stats.skillU.action, stats.skillU.frameDuration, Animation.PlayMode.NORMAL);
+        }
 
         // Bề rộng neo = bề rộng frame idle. Mọi frame khác (kể cả frame có effect dài ra)
         // đều vẽ từ mép trái của ô neo này, nên thân nhân vật không bị lệch.
@@ -163,37 +193,44 @@ public class Fighter {
      * @param screenW chiều rộng màn hình, dùng để chặn đi ra ngoài
      */
     public void update(float delta, float screenW) {
-        // Đếm ngược thời gian nghỉ giữa 2 lần lướt (chạy ở mọi state)
+        // Đếm ngược các cooldown (chạy ở mọi state)
         if (dashCooldown > 0f) dashCooldown -= delta;
+        if (skillCooldown > 0f) skillCooldown -= delta;
 
         // Mỗi phím chỉ đọc 1 lần mỗi frame (true đúng 1 frame khi vừa bấm) rồi truyền xuống các hàm con.
-        // dash còn bị chặn khi đang cooldown, nên mọi state đều tự áp dụng cooldown mà không cần kiểm tra lại.
+        // dash và skillU đã gồm điều kiện cooldown (và skillU gồm cả việc nhân vật có skill hay không),
+        // nên mọi state tự áp dụng mà không cần kiểm tra lại.
         boolean atk = controller.isAttackPressed();
         boolean jump = controller.isJumpPressed();
         boolean dash = controller.isDashPressed() && dashCooldown <= 0f;
+        boolean skillU = controller.isSkillUPressed() && stats.skillU != null && skillCooldown <= 0f;
 
         switch (state) {
             case FREE:
-                // Thứ tự ưu tiên khi bấm cùng frame: lướt > nhảy > đánh > đi
+                // Ưu tiên khi bấm cùng frame: lướt > nhảy > skill > đánh > đi
                 if (dash) startDash();
                 else if (jump) startJump();
+                else if (skillU) startSkill(stats.skillU);
                 else if (atk && moves.length > 0) startAttack(0);   // bắt đầu chuỗi từ đòn đầu
                 else updateMovement(delta);
                 break;
             case ATTACK:
-                updateAttack(delta, atk);
+                updateAttack(delta, atk, skillU);
                 break;
             case RECOVERY:
-                updateRecovery(delta, atk, jump, dash);
+                updateRecovery(delta, atk, jump, dash, skillU);
                 break;
             case AIR:
                 updateAir(delta, jump, dash);
                 break;
             case LAND:
-                updateLand(delta, atk, jump, dash);
+                updateLand(delta, atk, jump, dash, skillU);
                 break;
             case DASH:
-                updateDash(delta);   // không truyền input: đang lướt là khóa cứng
+                updateDash(delta);    // không truyền input: đang lướt là khóa cứng
+                break;
+            case SKILL:
+                updateSkill(delta);   // không truyền input: đang skill là khóa cứng
                 break;
         }
 
@@ -221,8 +258,8 @@ public class Fighter {
     private int moveHorizontal(float delta) {
         int dir = controller.getMoveDirection();
         if (dir != 0) {
-            facingLeft = dir < 0;
-            centerX += dir * stats.moveSpeed * delta;
+            facingLeft = dir < 0;                       // quay mặt theo hướng đi
+            centerX += dir * stats.moveSpeed * delta;   // quãng đường = tốc độ * thời gian
         }
         return dir;
     }
@@ -230,6 +267,7 @@ public class Fighter {
     /** Di chuyển trái/phải và chọn animation idle/run. Dùng ở FREE, RECOVERY và LAND. */
     private void updateMovement(float delta) {
         int dir = moveHorizontal(delta);
+        // playAnimation không reset nếu đang chạy đúng action, nên gọi mỗi frame được
         character.playAnimation(dir != 0 ? "run" : "idle",
             dir != 0 ? RUN_FRAME_DURATION : IDLE_FRAME_DURATION);
     }
@@ -246,18 +284,22 @@ public class Fighter {
         frameCount = animManager.get(charId, move.action, move.frameDuration).getKeyFrames().length;
         stateTime = 0f;
         buffered = false;
+        skillBuffered = false;
         hitDone = false;
         state = State.ATTACK;
         character.playFromStart(move.action, move.frameDuration);
     }
 
     /**
-     * Đang chạy 1 đòn: đếm thời gian, gây dame ở frame chỉ định, và khi animation hết
-     * thì nối đòn kế (nếu đã bấm J trong lúc đánh) hoặc chuyển sang RECOVERY.
+     * Đang chạy 1 đòn: đếm thời gian, gây dame ở frame chỉ định.
+     * Bấm U: skill ngắt đòn này khi đã qua frame gây dame SKILL_CANCEL_DELAY_FRAMES frame
+     * (bấm sớm thì được nhớ lại, tới lúc đó tự ra skill).
+     * Hết animation thì nối đòn kế (nếu đã bấm J) hoặc sang RECOVERY.
      * Đang ra đòn thì không nhảy / lướt / di chuyển được.
      */
-    private void updateAttack(float delta, boolean atk) {
-        if (atk) buffered = true;   // spam J lúc đang đánh thì nhớ lại để nối đòn
+    private void updateAttack(float delta, boolean atk, boolean skillU) {
+        if (atk) buffered = true;             // spam J lúc đang đánh -> nhớ để nối đòn
+        if (skillU) skillBuffered = true;     // bấm U lúc đang đánh -> nhớ để ngắt sang skill
         stateTime += delta;
 
         // Frame đang hiển thị theo thời gian (chặn ở frame cuối)
@@ -267,6 +309,15 @@ public class Fighter {
         if (!hitDone && frame >= move.hitFrame) {
             hitDone = true;
             doHit(move);
+        }
+
+        // Skill ngắt đòn thường: chỉ khi đã qua frame gây dame SKILL_CANCEL_DELAY_FRAMES frame.
+        // Chặn ở frame cuối để đòn ngắn (ít frame) vẫn ngắt được, không bị kẹt vì cửa sổ vượt quá số frame.
+        int cancelFrame = Math.min(move.hitFrame + SKILL_CANCEL_DELAY_FRAMES, frameCount - 1);
+        if (skillBuffered && frame >= cancelFrame) {
+            comboIndex = 0;                   // dùng skill thì tính như hết chuỗi combo
+            startSkill(stats.skillU);
+            return;
         }
 
         // Hết animation của đòn
@@ -283,12 +334,12 @@ public class Fighter {
 
     /**
      * Nghỉ sau đòn. Vẫn đi lại được.
-     *  - Lướt hoặc nhảy: hủy recovery ngay, reset combo về đòn đầu.
+     *  - Lướt / nhảy / skill: hủy recovery ngay, reset combo về đòn đầu.
      *  - Chưa phải đòn cuối: bấm J trong lúc nghỉ thì nối đòn kế.
      *  - Đòn cuối: bấm J bị bỏ qua (khóa), để đối thủ có thời gian phản ứng.
      * Hết giờ thì reset chuỗi về đòn đầu và về FREE.
      */
-    private void updateRecovery(float delta, boolean atk, boolean jump, boolean dash) {
+    private void updateRecovery(float delta, boolean atk, boolean jump, boolean dash, boolean skillU) {
         boolean isLast = comboIndex == moves.length - 1;
         recoveryTimer -= delta;
 
@@ -302,6 +353,11 @@ public class Fighter {
             startJump();
             return;
         }
+        if (skillU) {
+            comboIndex = 0;     // hủy recovery bằng skill: tính như hết chuỗi combo
+            startSkill(stats.skillU);
+            return;
+        }
         if (atk && !isLast) {
             startAttack(comboIndex + 1);   // nối đòn trong cửa sổ recovery
             return;                        // đã chuyển sang ATTACK, không di chuyển nữa
@@ -311,6 +367,56 @@ public class Fighter {
 
         if (recoveryTimer <= 0f) {
             comboIndex = 0;                // hết hạn: reset chuỗi
+            state = State.FREE;
+        }
+    }
+
+    // ===================== SKILL U =====================
+
+    /** Bắt đầu skill: reset bộ đếm, phát animation từ frame đầu. Chỉ dùng được dưới đất. */
+    private void startSkill(Skill s) {
+        skill = s;
+        skillFrameCount = animManager.get(charId, s.action, s.frameDuration).getKeyFrames().length;
+        skillTime = 0f;
+        skillNextHit = 0;
+        skillSpawned = false;
+        skillBuffered = false;
+        state = State.SKILL;
+        character.playFromStart(s.action, s.frameDuration);
+    }
+
+    /**
+     * Đang chạy skill: khóa cứng (không đi / nhảy / lướt / đánh thường).
+     * Tới mỗi frame trong hitFrames thì gây dame 1 lần, tới spawnFrame thì sinh effect.
+     * Hết animation thì bắt đầu cooldown rồi về FREE.
+     */
+    private void updateSkill(float delta) {
+        skillTime += delta;
+        int frame = Math.min((int) (skillTime / skill.frameDuration), skillFrameCount - 1);
+
+        // Skill cận chiến nhiều hit: con trỏ skillNextHit chống gây dame lặp.
+        // while thay vì if: lag frame lớn có thể vượt qua nhiều hitFrames cùng lúc
+        while (skillNextHit < skill.hitFrames.length && frame >= skill.hitFrames[skillNextHit]) {
+            doSkillHit(skill, skillNextHit);
+            skillNextHit++;
+        }
+
+        // Skill có effect: tới spawnFrame thì sinh 1 lần (cờ skillSpawned).
+        // Vị trí sinh tính theo hướng mặt, độ cao theo groundY + airY.
+        if (!skillSpawned && skill.projectile != null && frame >= skill.spawnFrame) {
+            skillSpawned = true;
+            ProjectileSpec p = skill.projectile;
+            int dir = facingLeft ? -1 : 1;
+            effects.spawnVolley(p, this,
+                centerX + dir * p.offsetX,
+                groundY + airY + p.offsetY,
+                dir);
+        }
+
+        // Hết animation của skill
+        if (skillTime >= skillFrameCount * skill.frameDuration) {
+            skillCooldown = skill.cooldown;   // cooldown đếm từ lúc skill XONG
+            comboIndex = 0;
             state = State.FREE;
         }
     }
@@ -330,7 +436,7 @@ public class Fighter {
 
     /**
      * Đang trên không (bay lên hoặc rơi): lướt được, nhảy tiếp nếu còn lượt, đi ngang được,
-     * chịu trọng lực. Chưa đánh được trên không. Chạm đất thì reset lượt nhảy và sang LAND.
+     * chịu trọng lực. Chưa đánh / dùng skill được trên không. Chạm đất thì reset lượt nhảy và sang LAND.
      */
     private void updateAir(float delta, boolean jump, boolean dash) {
         if (dash) { startDash(); return; }                       // lướt ưu tiên hơn nhảy
@@ -365,12 +471,13 @@ public class Fighter {
     }
 
     /**
-     * Đang animation chạm đất. Không khóa người chơi: lướt, nhảy, đánh hoặc di chuyển
+     * Đang animation chạm đất. Không khóa người chơi: lướt, nhảy, skill, đánh hoặc di chuyển
      * đều hủy animation ngay. Đứng yên thì chạy hết animation rồi về FREE.
      */
-    private void updateLand(float delta, boolean atk, boolean jump, boolean dash) {
+    private void updateLand(float delta, boolean atk, boolean jump, boolean dash, boolean skillU) {
         if (dash) { startDash(); return; }
         if (jump) { startJump(); return; }
+        if (skillU) { startSkill(stats.skillU); return; }
         if (atk && moves.length > 0) { startAttack(0); return; }
 
         if (controller.getMoveDirection() != 0) {
@@ -424,11 +531,18 @@ public class Fighter {
     // ===================== GÂY DAME =====================
 
     /**
-     * Được gọi đúng 1 lần khi đòn tới frame gây dame.
+     * Được gọi đúng 1 lần khi đòn thường tới frame gây dame.
      * TODO: tạo hitbox, kiểm tra overlap với hurtbox đối thủ, trừ máu m.damage.
      * Nhớ tính vị trí hitbox theo groundY + airY, không chỉ groundY.
      */
     private void doHit(Move m) {
+    }
+
+    /**
+     * Được gọi mỗi lần tới 1 frame gây dame của skill cận chiến (hitIndex = hit thứ mấy, từ 0).
+     * TODO: giống doHit, trừ máu s.damage. Skill bắn effect không dùng hàm này (dame nằm ở effect).
+     */
+    private void doSkillHit(Skill s, int hitIndex) {
     }
 
     // ===================== API CHO GAMESCREEN =====================

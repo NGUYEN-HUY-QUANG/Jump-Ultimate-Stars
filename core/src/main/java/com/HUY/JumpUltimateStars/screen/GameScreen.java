@@ -2,6 +2,7 @@ package com.HUY.JumpUltimateStars.screen;
 
 import com.HUY.JumpUltimateStars.character.Fighter;
 import com.HUY.JumpUltimateStars.character.animation.CharacterAnimationManager;
+import com.HUY.JumpUltimateStars.effect.EffectManager;
 import com.HUY.JumpUltimateStars.hethong.MainGame;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
 import com.HUY.JumpUltimateStars.map.MapData;
@@ -19,12 +20,16 @@ import com.badlogic.gdx.utils.ScreenUtils;
  *
  * Nhận từ CharacterSelectScreen: chế độ chơi, id nhân vật của P1/P2 và map đã chọn.
  * Màn hình này chỉ điều phối: tạo map + các Fighter, mỗi frame gọi update rồi vẽ theo lớp
- * (nền map -> đường đỏ tạm -> nhân vật). Logic di chuyển/animation nằm trong Fighter,
- * đọc phím nằm trong PlayerController, vị trí map nằm trong MapData.
+ * (nền map -> đường đỏ tạm -> nhân vật + effect). Logic di chuyển/animation/skill nằm trong
+ * Fighter, đọc phím nằm trong PlayerController, vị trí map nằm trong MapData,
+ * effect (phi tiêu...) nằm trong EffectManager.
  *
- * Vòng đời tài nguyên: batch, shapeRenderer, animManager, map đều được tạo trong show()
- * và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(), không tự dispose,
- * nên nơi nào rời khỏi GameScreen sau này phải gọi dispose() thủ công.
+ * Vòng đời tài nguyên: batch, shapeRenderer, animManager, effectManager, map đều được tạo
+ * trong show() và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(),
+ * không tự dispose, nên nơi nào rời khỏi GameScreen sau này phải gọi dispose() thủ công.
+ *
+ * TODO: va chạm. Duyệt effectManager.getProjectiles(), so getHitbox() với hurtbox của
+ * Fighter đối thủ, gọi p.tryHit(target, effectManager.getTime()), trả về true thì trừ máu.
  */
 public class GameScreen implements Screen {
 
@@ -42,11 +47,15 @@ public class GameScreen implements Screen {
     private final MapData map;
 
     private OrthographicCamera camera;
-    private SpriteBatch batch;           // vẽ ảnh: nền map, nhân vật
+    private SpriteBatch batch;           // vẽ ảnh: nền map, nhân vật, effect
     private ShapeRenderer shapeRenderer; // vẽ hình: đường đỏ làm đất tạm
 
     // Cache animation dùng chung cho cả 2 Fighter (dispose 1 lần ở dispose())
     private CharacterAnimationManager animManager;
+
+    // Quản lý effect đang tồn tại (phi tiêu...) + cache animation của chúng.
+    // Dùng chung cho cả 2 Fighter (Fighter chỉ dùng, không sở hữu), dispose 1 lần ở dispose()
+    private EffectManager effectManager;
 
     private Fighter fighter1;
     private Fighter fighter2; // null nếu SINGLE
@@ -76,14 +85,16 @@ public class GameScreen implements Screen {
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
         animManager = new CharacterAnimationManager();
+        // Phải tạo TRƯỚC các Fighter vì constructor của Fighter nhận effectManager
+        effectManager = new EffectManager();
         map.load();
 
         // P1 bên trái quay phải (không flip), P2 bên phải quay trái (flip).
         // Vị trí spawn do map quyết định (fix cứng theo từng map)
-        fighter1 = new Fighter(animManager, p1Id, PlayerController.p1(),
+        fighter1 = new Fighter(animManager, effectManager, p1Id, PlayerController.p1(),
             map.getP1SpawnX(w), false);
         if (p2Id != null) {
-            fighter2 = new Fighter(animManager, p2Id, PlayerController.p2(),
+            fighter2 = new Fighter(animManager, effectManager, p2Id, PlayerController.p2(),
                 map.getP2SpawnX(w), true);
         }
         updateGround(h);
@@ -105,6 +116,9 @@ public class GameScreen implements Screen {
         // --- Cập nhật logic (input, di chuyển, animation) ---
         fighter1.update(delta, w);
         if (fighter2 != null) fighter2.update(delta, w);
+        // Sau khi Fighter update, vì Fighter có thể vừa sinh effect ở frame này
+        effectManager.update(delta);
+        // TODO: check va chạm effect với Fighter đối thủ ở đây (xem mô tả ở đầu class)
 
         // --- Vẽ ---
         ScreenUtils.clear(0f, 0f, 0f, 1f); // nền đen
@@ -122,10 +136,12 @@ public class GameScreen implements Screen {
         map.renderPlaceholder(shapeRenderer, w, h);
         shapeRenderer.end();
 
-        // Lớp 3: nhân vật, vẽ sau cùng để nằm trên nền
+        // Lớp 3: nhân vật rồi tới effect, vẽ sau cùng để nằm trên nền
+        // (effect vẽ sau Fighter nên nằm đè lên nhân vật)
         batch.begin();
         fighter1.draw(batch);
         if (fighter2 != null) fighter2.draw(batch);
+        effectManager.draw(batch);
         batch.end();
     }
 
@@ -150,6 +166,7 @@ public class GameScreen implements Screen {
         batch.dispose();
         shapeRenderer.dispose();
         animManager.dispose();
+        effectManager.dispose();
         map.dispose();
     }
 }
