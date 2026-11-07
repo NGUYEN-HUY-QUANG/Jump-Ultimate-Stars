@@ -42,7 +42,7 @@ public class AirSkillContext {
     /** Cờ tự do cho skill, dùng để làm việc đúng 1 lần (vd "đã bắn", "đã dịch chuyển"). Reset về false lúc bắt đầu. */
     public boolean flag;
 
-    /** Sát thương cận chiến skill vừa báo (Fighter đọc rồi xử lý). Đặt bằng hit(). */
+    /** Sát thương cận chiến skill báo ở frame này (Fighter đọc rồi xử lý). Đặt bằng hit(). */
     public int hitDamage;
 
     private final Array<Effect> effects;   // danh sách effect của Fighter
@@ -76,7 +76,10 @@ public class AirSkillContext {
         effects.add(e);
     }
 
-    /** Báo gây dame cận chiến. Fighter sẽ xử lý (hiện là TODO hitbox). */
+    /**
+     * Báo "hitbox cận chiến đang bật ở frame này". Có thể gọi MỖI FRAME: Fighter tự kiểm tra va chạm
+     * và chỉ tính dame 1 lần mỗi lần dùng skill (trúng rồi thì các lần gọi sau bị bỏ qua).
+     */
     public void hit(int damage) {
         hitDamage = damage;
     }

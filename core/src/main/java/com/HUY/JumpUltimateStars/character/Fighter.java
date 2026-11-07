@@ -38,6 +38,7 @@ import com.badlogic.gdx.utils.Array;
  *   AIR ──bấm J (1 lần mỗi lần nhảy)──> AIR_ATTACK (đứng yên giữa trời) ──hết──> AIR (rơi tiếp)
  *   AIR ──bấm U (1 lần mỗi lần nhảy)──> AIR_SKILL (mỗi loại skill tự quyết cách di chuyển)
  *         ──xong, đang ở đất──> LAND   |   ──xong, còn trên không──> AIR (rơi tiếp)
+ *   AIR_ATTACK ──bấm U (sau frame gây dame + vài frame)──> AIR_SKILL   (U ngắt J trên không, thành combo)
  */
 public class Fighter {
 
@@ -53,6 +54,9 @@ public class Fighter {
 
     // Skill ngắt được đòn thường sau frame gây dame bao nhiêu frame (0 = ngắt ngay)
     private static final int SKILL_CANCEL_DELAY_FRAMES = 3;
+
+    // Skill U trên không ngắt được đòn J trên không sau frame gây dame bao nhiêu frame (0 = ngắt ngay)
+    private static final int AIR_SKILL_CANCEL_DELAY_FRAMES = 5;
 
     // FREE: tự do | ATTACK: đang ra đòn | RECOVERY: nghỉ sau đòn | AIR: trên không
     // LAND: chạm đất (không khóa) | DASH: lướt (khóa cứng) | SKILL: tung skill (khóa cứng)
@@ -120,6 +124,7 @@ public class Fighter {
     private int airAttackFrameCount;
     private float airAttackTime;
     private boolean airAttackHitDone;
+    private boolean airSkillBuffered;   // đã bấm U lúc đang đánh J trên không -> ra skill khi tới frame hủy
 
     // ===================== SKILL U TRÊN KHÔNG =====================
 
@@ -128,6 +133,7 @@ public class Fighter {
     private boolean airSkillUsed;   // đã dùng skill U trên không trong lượt nhảy này (reset khi chạm đất)
     private int airSkillFrameCount;
     private float airSkillTime;
+    private boolean airSkillHitDone;    // skill đã trúng đối thủ chưa (chỉ tính dame 1 lần mỗi lần dùng)
 
     /**
      * @param animManager  cache animation dùng chung (không dispose ở đây)
@@ -213,7 +219,7 @@ public class Fighter {
             case RECOVERY: updateRecovery(delta, atk, jump, dash, skillU, defend); break;
             case AIR:      updateAir(delta, atk, jump, dash, airSkillU); break;
             case AIR_SKILL: updateAirSkill(delta); break;
-            case AIR_ATTACK: updateAirAttack(delta); break;
+            case AIR_ATTACK: updateAirAttack(delta, airSkillU); break;
             case LAND:     updateLand(delta, atk, jump, dash, skillU, defend); break;
             case DASH:     updateDash(delta); break;
             case SKILL:    updateSkill(delta); break;
@@ -473,23 +479,33 @@ public class Fighter {
         airAttackFrameCount = animManager.get(charId, m.action, m.frameDuration).getKeyFrames().length;
         airAttackTime = 0f;
         airAttackHitDone = false;
+        airSkillBuffered = false;
         state = State.AIR_ATTACK;
         character.playFromStart(m.action, m.frameDuration);
     }
 
     /**
      * Đang đánh trên không (khóa cứng): đứng yên tại chỗ, không áp trọng lực, không đi ngang.
-     * velY và airY được giữ nguyên trong lúc đánh. Hết animation thì về AIR và rơi xuống:
-     * đang rơi thì rơi tiếp, đang bay lên (velY > 0) thì bị ép về 0 để bắt đầu rơi.
+     * velY và airY được giữ nguyên trong lúc đánh. Bấm U thì nhớ lại, tới khi qua
+     * hitFrame + AIR_SKILL_CANCEL_DELAY_FRAMES thì ngắt sang skill U trên không (giống skill dưới đất).
+     * Không bấm U, hết animation thì về AIR và rơi xuống: đang rơi thì rơi tiếp,
+     * đang bay lên (velY > 0) thì bị ép về 0 để bắt đầu rơi.
      */
-    private void updateAirAttack(float delta) {
+    private void updateAirAttack(float delta, boolean airSkillU) {
         Move m = stats.airMove;
+        if (airSkillU) airSkillBuffered = true;
         airAttackTime += delta;
 
         int frame = Math.min((int) (airAttackTime / m.frameDuration), airAttackFrameCount - 1);
         if (!airAttackHitDone && frame >= m.hitFrame) {
             airAttackHitDone = true;
             doHit(m);
+        }
+
+        int cancelFrame = Math.min(m.hitFrame + AIR_SKILL_CANCEL_DELAY_FRAMES, airAttackFrameCount - 1);
+        if (airSkillBuffered && frame >= cancelFrame) {
+            startAirSkill();
+            return;
         }
 
         if (airAttackTime >= airAttackFrameCount * m.frameDuration) {
@@ -505,6 +521,7 @@ public class Fighter {
         airSkillUsed = true;
         airSkillFrameCount = animManager.get(charId, airSkill.action, airSkill.frameDuration).getKeyFrames().length;
         airSkillTime = 0f;
+        airSkillHitDone = false;
         velY = 0f;
         airCtx.reset(centerX, airY, groundY, facingLeft ? -1 : 1);
         airSkill.start(airCtx);
@@ -533,10 +550,11 @@ public class Fighter {
         centerX = airCtx.x;
         airY = airCtx.airY;
 
-        if (airCtx.hitDamage > 0) {
-            doAirSkillHit(airCtx.hitDamage);
-            airCtx.hitDamage = 0;
+        // Skill báo hitbox đang bật (c.hit) mỗi frame; chỉ tính dame 1 lần, trúng rồi thì thôi
+        if (airCtx.hitDamage > 0 && !airSkillHitDone) {
+            airSkillHitDone = doAirSkillHit(airCtx.hitDamage);
         }
+        airCtx.hitDamage = 0;
 
         if (finished) {
             skillCooldown = airSkill.cooldown;
@@ -585,8 +603,14 @@ public class Fighter {
     private void doSkillHit(Skill s, int hitIndex) {
     }
 
-    /** Gọi khi skill U trên không báo gây dame cận chiến (c.hit). TODO: hitbox, trừ máu damage. */
-    private void doAirSkillHit(int damage) {
+    /**
+     * Gọi mỗi frame khi skill U trên không đang bật hitbox (c.hit) và chưa trúng lần nào.
+     * TODO: kiểm tra hitbox với đối thủ, trúng thì trừ máu damage rồi trả true.
+     *
+     * @return true nếu đã trúng đối thủ (từ đó không gọi lại nữa), false nếu chưa trúng (frame sau thử lại)
+     */
+    private boolean doAirSkillHit(int damage) {
+        return false;
     }
 
     // ===================== API CHO GAMESCREEN =====================

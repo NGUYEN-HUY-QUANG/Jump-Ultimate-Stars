@@ -4,7 +4,8 @@ import com.badlogic.gdx.math.MathUtils;
 
 /**
  * Skill U trên không kiểu LAO XUỐNG: bay thẳng từ chỗ đang đứng xuống đất theo góc cho trước,
- * hướng theo mặt nhân vật. Chạm đất thì gây dame cận chiến và kết thúc.
+ * hướng theo mặt nhân vật. Hitbox bật suốt lúc lao (ngay từ frame 0), trúng 1 lần là đủ dame,
+ * trúng rồi vẫn tiếp tục lao tới khi chạm đất mới kết thúc.
  *   - Goku / Naruto: angleDeg = 60 (chéo xuống)
  *   - Đánh thẳng xuống: angleDeg = 90
  */
@@ -41,10 +42,8 @@ public class DiveAirSkill extends AirSkill {
         c.x += c.velX * delta;
         c.airY += c.velY * delta;
 
-        if (c.airY <= 0f) {
-            c.hit(damage);
-            return true;   // chạm đất -> kết thúc
-        }
-        return false;
+        c.hit(damage);   // báo hitbox đang bật mỗi frame, Fighter lo chuyện chỉ tính dame 1 lần
+
+        return c.airY <= 0f;   // chạm đất -> kết thúc
     }
 }
