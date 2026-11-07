@@ -37,6 +37,11 @@ public abstract class CharacterStats {
     /** Khoảng nghỉ sau mỗi lần lướt, chưa lướt lại được (giây). Đếm từ lúc lướt xong. */
     public float dashRecovery = 0.1f;
 
+    // ===================== THỦ =====================
+
+    /** Sát thương nhận vào khi đang thủ (cố định, bất kể đòn mạnh hay yếu). */
+    public int guardDamage = 10;
+
     // ===================== HIỂN THỊ & MÁU =====================
 
     /** Hệ số phóng to nhân vật khi vẽ trong trận (nhân vào kích thước ảnh gốc). */
@@ -52,6 +57,22 @@ public abstract class CharacterStats {
      * Nhân vật không có đòn thường thì để mảng rỗng.
      */
     public Move[] moves = {};
+
+    /**
+     * Đòn đánh trên không (bấm J khi đang AIR), mỗi lượt nhảy chỉ đánh được 1 lần.
+     * Ví dụ new Move("J_AIR", 0.06f, 40, 1, 0f) -> characters/{charId}/J_AIR/J_AIR_0.png, ...
+     * Trường recovery không dùng. null = nhân vật không có đòn trên không (bấm J trên không không có tác dụng).
+     */
+    public Move airMove = null;
+
+    /**
+     * Skill U khi bấm trên không, mỗi lượt nhảy chỉ dùng được 1 lần.
+     * Gán 1 loại skill cụ thể trong Stats của nhân vật, ví dụ:
+     *   airSkillU = new DiveAirSkill("U_AIR", 0.06f, 0.3f, 10, 60f, 1500f);
+     * null = nhân vật không có skill U trên không (bấm U trên không không có tác dụng).
+     * Dùng chung cooldown với skillU dưới đất.
+     */
+    public AirSkill airSkillU = null;
 
     /** Skill gắn với phím U. null = nhân vật chưa có skill U (bấm U không có tác dụng). */
     public Skill skillU = null;

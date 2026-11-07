@@ -5,7 +5,7 @@ import com.badlogic.gdx.Input.Keys;
 
 /**
  * Đọc phím của 1 người chơi và chuyển thành "ý định" điều khiển
- * (hiện tại: hướng di chuyển, tấn công thường, nhảy, lướt, skill U).
+ * (hiện tại: hướng di chuyển, tấn công thường, nhảy, lướt, skill U, thủ).
  *
  * Tách riêng khỏi Fighter để Fighter không cần biết phím cụ thể nào được dùng.
  * Muốn đổi phím, hoặc sau này thay bằng tay cầm / AI điều khiển, chỉ cần sửa ở đây
@@ -19,7 +19,7 @@ import com.badlogic.gdx.Input.Keys;
  * rồi thêm tham số vào constructor và p1()/p2().
  *
  * Phân loại các hàm đọc phím:
- *  - getMoveDirection(): đọc phím GIỮ (isKeyPressed), đúng liên tục khi còn giữ
+ *  - getMoveDirection(), isDefendHeld(): đọc phím GIỮ (isKeyPressed), đúng liên tục khi còn giữ
  *  - isAttackPressed / isJumpPressed / isDashPressed / isSkillUPressed: đọc phím BẤM
  *    (isKeyJustPressed), chỉ đúng 1 frame khi vừa nhấn xuống, giữ phím không tự lặp lại
  */
@@ -41,6 +41,9 @@ public class PlayerController {
     // Mã phím skill U. Nhân vật không có skill U (stats.skillU == null) thì Fighter bỏ qua phím này
     private final int keySkillU;
 
+    // Mã phím thủ (GIỮ phím để thủ, thả ra thì thôi)
+    private final int keyDefend;
+
     /**
      * @param keyLeft   mã phím đi sang trái (vd Keys.A)
      * @param keyRight  mã phím đi sang phải (vd Keys.D)
@@ -48,23 +51,30 @@ public class PlayerController {
      * @param keyJump   mã phím nhảy (vd Keys.K)
      * @param keyDash   mã phím lướt (vd Keys.L)
      * @param keySkillU mã phím skill U (vd Keys.U)
+     * @param keyDefend mã phím thủ (vd Keys.S)
      */
-    public PlayerController(int keyLeft, int keyRight, int keyAttack, int keyJump, int keyDash, int keySkillU) {
+    public PlayerController(int keyLeft, int keyRight, int keyAttack, int keyJump,
+                            int keyDash, int keySkillU, int keyDefend) {
         this.keyLeft = keyLeft;
         this.keyRight = keyRight;
         this.keyAttack = keyAttack;
         this.keyJump = keyJump;
         this.keyDash = keyDash;
         this.keySkillU = keySkillU;
+        this.keyDefend = keyDefend;
     }
 
     // Bộ phím mặc định của từng người chơi. Muốn đổi phím thì sửa ở 2 hàm này.
 
-    /** P1: A = trái, D = phải, J = tấn công, K = nhảy, L = lướt, U = skill U. */
-    public static PlayerController p1() { return new PlayerController(Keys.A, Keys.D, Keys.J, Keys.K, Keys.L, Keys.U); }
+    /** P1: A = trái, D = phải, J = tấn công, K = nhảy, L = lướt, U = skill U, S = thủ (giữ). */
+    public static PlayerController p1() {
+        return new PlayerController(Keys.A, Keys.D, Keys.J, Keys.K, Keys.L, Keys.U, Keys.S);
+    }
 
-    /** P2: mũi tên trái/phải = di chuyển, phím số 1 (hàng trên) = tấn công, số 2 = nhảy, số 3 = lướt, số 4 = skill U. */
-    public static PlayerController p2() { return new PlayerController(Keys.LEFT, Keys.RIGHT, Keys.NUM_1, Keys.NUM_2, Keys.NUM_3, Keys.NUM_4); }
+    /** P2: mũi tên trái/phải = di chuyển, số 1 = tấn công, số 2 = nhảy, số 3 = lướt, số 4 = skill U, mũi tên xuống = thủ (giữ). */
+    public static PlayerController p2() {
+        return new PlayerController(Keys.LEFT, Keys.RIGHT, Keys.NUM_1, Keys.NUM_2, Keys.NUM_3, Keys.NUM_4, Keys.DOWN);
+    }
 
     /**
      * Trả về hướng di chuyển theo phím đang được GIỮ ở thời điểm gọi (gọi mỗi frame).
@@ -116,5 +126,13 @@ public class PlayerController {
      */
     public boolean isSkillUPressed() {
         return Gdx.input.isKeyJustPressed(keySkillU);
+    }
+
+    /**
+     * true liên tục khi còn GIỮ phím thủ (khác các phím bấm ở trên).
+     * Fighter dùng để vào trạng thái thủ khi bấm xuống và thoát khi thả phím.
+     */
+    public boolean isDefendHeld() {
+        return Gdx.input.isKeyPressed(keyDefend);
     }
 }
