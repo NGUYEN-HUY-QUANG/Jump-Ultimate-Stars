@@ -37,6 +37,12 @@ public abstract class CharacterStats {
     /** Khoảng nghỉ sau mỗi lần lướt, chưa lướt lại được (giây). Đếm từ lúc lướt xong. */
     public float dashRecovery = 0.1f;
 
+    /**
+     * Số lần lướt tối đa trên không trước khi chạm đất lại (chạm đất hoặc hạ cánh lên platform
+     * thì reset). Lướt dưới đất không tính. 0 = không cho lướt trên không.
+     */
+    public int maxAirDashes = 2;
+
     // ===================== THỦ =====================
 
     /** Sát thương nhận vào khi đang thủ (cố định, bất kể đòn mạnh hay yếu). */
@@ -45,7 +51,7 @@ public abstract class CharacterStats {
     // ===================== HIỂN THỊ & MÁU =====================
 
     /** Hệ số phóng to nhân vật khi vẽ trong trận (nhân vào kích thước ảnh gốc). */
-    public float scale = 2.0f;
+    public float scale = 2.5f;
 
     /** Máu tối đa. */
     public int maxHp = 1000;

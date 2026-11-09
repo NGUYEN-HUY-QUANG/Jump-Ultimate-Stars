@@ -23,7 +23,7 @@ public class SmallShuriken implements Effect {
     private static final float RANGE = 1000f;           // bay tối đa bao xa (px)
     private static final float OFFSET_X = 40f;          // lệch ngang so với tâm nhân vật
     private static final float OFFSET_Y = 60f;          // độ cao viên giữa so với chân
-    private static final float SCALE = 1f;
+    private static final float SCALE = 2f;
     private static final int COUNT = 3;                 // số viên
     private static final float SPACING_Y = 40f;         // khoảng cách dọc giữa 2 viên
     private static final int DAMAGE = 8;

@@ -5,7 +5,6 @@ import com.HUY.JumpUltimateStars.character.CharacterRegistry;
 import com.HUY.JumpUltimateStars.character.animation.CharacterAnimationManager;
 import com.HUY.JumpUltimateStars.hethong.MainGame;
 import com.HUY.JumpUltimateStars.hethong.PlayerSelector;
-import com.HUY.JumpUltimateStars.map.MapRegistry;
 import com.HUY.JumpUltimateStars.ui.CharacterSlot;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input.Keys;
@@ -31,6 +30,8 @@ import java.util.List;
  * Ho tro 2 che do:
  *  - Mode.SINGLE: chi P1 duoc chon (dung cho PVE, Luyen tap, va Vuot ai sau nay)
  *  - Mode.DUO:    ca P1 va P2 cung chon (dung cho PVP)
+ *
+ * Chon xong thi sang MapSelectScreen (chon map), roi moi vao GameScreen.
  *
  * Moi nguoi choi (P1/P2) duoc dai dien boi 1 PlayerSelector (xem package hethong),
  * gom index dang chon + preview + phim dieu khien rieng. Man hinh nay chi dong vai
@@ -195,8 +196,8 @@ public class CharacterSelectScreen implements Screen {
             }
             if (p.isConfirmPressed() && !p.isLocked()) {
                 p.startConfirm();
-                // Slot chỉ để hiển thị hiệu ứng. Nếu slot đã đang nhấp nháy/đỏ
-                // (do người kia confirm trước) thì giữ nguyên, không reset.
+                // Slot chi de hien thi hieu ung. Neu slot da dang nhap nhay/do
+                // (do nguoi kia confirm truoc) thi giu nguyen, khong reset.
                 CharacterSlot slot = slots.get(p.getIndex());
                 if (slot.getState() != CharacterSlot.State.CONFIRMING
                     && slot.getState() != CharacterSlot.State.CONFIRMED) {
@@ -209,9 +210,6 @@ public class CharacterSelectScreen implements Screen {
 
     // Dong bo trang thai SELECTED cua slot theo vi tri hien tai cua tung
     // nguoi choi, khong dong vao slot dang CONFIRMING/CONFIRMED.
-    // Luu y: neu P1 va P2 cung tro vao 1 slot, slot do van duoc coi la
-    // SELECTED (cho phep 2 nguoi chon trung nhan vat). Neu sau nay muon
-    // cam trung nhan vat thi chan ngay trong PlayerSelector.handleMove().
     private void updateSlotHighlights() {
         for (CharacterSlot s : slots) {
             if (s.getState() == CharacterSlot.State.SELECTED) {
@@ -227,10 +225,8 @@ public class CharacterSelectScreen implements Screen {
     }
 
     /**
-     * Kiem tra tat ca nguoi choi active (P1, hoac P1+P2 neu DUO) da o
-     * trang thai CONFIRMED hay chua. CharacterSlot tu chuyen CONFIRMING
-     * -> CONFIRMED sau FLASH_DURATION giay (xem CharacterSlot.update()),
-     * nen chi can doc state la du, khong can tu quan ly timer o day.
+     * Kiem tra tat ca nguoi choi active da CONFIRMED hay chua.
+     * Neu roi thi chuyen sang MapSelectScreen (chon map) kem id nhan vat da chon.
      */
     private boolean checkAllConfirmed() {
         for (PlayerSelector p : players) {
@@ -239,7 +235,7 @@ public class CharacterSelectScreen implements Screen {
         String p1Id = slots.get(p1.getIndex()).getData().id;
         String p2Id = (p2 != null) ? slots.get(p2.getIndex()).getData().id : null;
 
-        game.setScreen(new GameScreen(game, mode, p1Id, p2Id, MapRegistry.ALL.get(0)));
+        game.setScreen(new MapSelectScreen(game, mode, p1Id, p2Id));
         dispose();
         return true;
     }
@@ -314,8 +310,7 @@ public class CharacterSelectScreen implements Screen {
         }
     }
 
-    // P1 va P2 cung tro vao 1 slot -> tach label/tam giac sang 2 ben
-    // de khong de len nhau.
+    // P1 va P2 cung tro vao 1 slot -> tach label/tam giac sang 2 ben de khong de len nhau.
     private float getIndicatorXOffset(PlayerSelector p) {
         if (p2 == null || p1.getIndex() != p2.getIndex()) return 0f;
         return p == p1 ? -LABEL_SAME_SLOT_OFFSET : LABEL_SAME_SLOT_OFFSET;

@@ -10,71 +10,127 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
  * Bản "đang chạy" của một map: giữ Texture ảnh nền và biết cách vẽ map đó.
  *
  * Phân vai với MapInfo:
- *  - MapInfo: chỉ chứa số liệu tĩnh (đường dẫn ảnh, tỉ lệ mặt đất, vị trí spawn),
- *             dùng chung được, không giữ tài nguyên.
- *  - MapData: giữ tài nguyên native (Texture) nên mỗi lần vào trận phải tạo 1 instance mới.
+ *  - MapInfo: số liệu tĩnh theo PIXEL ẢNH (gốc DƯỚI-trái, y hướng lên), dùng chung được, không giữ tài nguyên.
+ *  - MapData: giữ Texture, nhân số liệu với scale để ra tọa độ THẾ GIỚI (cùng gốc dưới-trái).
  *
  * Vòng đời bắt buộc: new MapData(info) -> load() -> (dùng) -> dispose().
- * Quên dispose() sẽ bị leak Texture; gọi render trước load() thì map có ảnh sẽ không vẽ gì.
  *
- * Mọi vị trí đều tính theo TỈ LỆ màn hình (0..1) rồi nhân với kích thước thật,
- * nên map vẫn đúng khi đổi kích thước cửa sổ.
+ * THẾ GIỚI: rộng = ảnh * scale, cao = ảnh * scale. Mọi hàm trả về / nhận pixel thế giới.
+ * Fighter, effect và camera đều dùng hệ này.
  */
 public class MapData {
 
-    // Độ dày (pixel) của đường đỏ vẽ làm mặt đất ở map tạm
+    // Độ dày (pixel thế giới) của đường vẽ debug / map tạm
     private static final float GROUND_THICKNESS = 4f;
 
-    // Số liệu tĩnh của map này (đường dẫn ảnh, groundY, spawn...)
+    // Bật để: vẽ đường mặt đất (đỏ) + platform (xanh lá) lên trên ảnh, và click chuột để
+    // in tọa độ pixel ảnh ra console (giúp chỉnh số trong MapRegistry). Chỉnh xong thì tắt.
+    public static final boolean DEBUG_PLATFORMS = false;
+
     private final MapInfo info;
 
     // Ảnh nền. null nếu map chưa có ảnh (map tạm) hoặc chưa gọi load()
     private Texture background;
 
+    // Kích thước thế giới (pixel) = ảnh * scale. Được đặt trong load()
+    private float worldW, worldH;
+
     public MapData(MapInfo info) { this.info = info; }
 
     /**
-     * Load ảnh nền từ disk (nếu map có ảnh). Gọi 1 lần trong show() của màn hình.
-     * Map tạm (backgroundPath == null) thì không làm gì.
+     * Load ảnh nền từ disk (nếu map có ảnh) và đặt kích thước thế giới = ảnh * scale.
+     * Map tạm (không có ảnh) thì lấy kích thước cửa sổ hiện tại.
      */
     public void load() {
         if (info.backgroundPath != null) {
             background = new Texture(Gdx.files.internal(info.backgroundPath));
-            // Linear filter để ảnh mượt khi bị kéo giãn theo kích thước cửa sổ
             background.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+            worldW = background.getWidth() * info.scale;
+            worldH = background.getHeight() * info.scale;
+        } else {
+            worldW = Gdx.graphics.getWidth();
+            worldH = Gdx.graphics.getHeight();
         }
     }
 
-    /** Giải phóng Texture. BẮT BUỘC gọi trong dispose() của màn hình, vì Texture không tự được GC dọn. */
+    /** Giải phóng Texture. BẮT BUỘC gọi trong dispose() của màn hình. */
     public void dispose() {
         if (background != null) background.dispose();
     }
 
-    /** Độ cao mặt đất (pixel) = chiều cao màn hình * tỉ lệ (0 = đáy, 1 = đỉnh). */
-    public float getGroundY(float screenH) { return screenH * info.groundYRatio; }
+    public float getWorldWidth() { return worldW; }
+    public float getWorldHeight() { return worldH; }
 
-    /** Tâm ngang (pixel) nơi P1 xuất hiện. */
-    public float getP1SpawnX(float screenW) { return screenW * info.p1SpawnXRatio; }
+    /** Đổi y pixel ảnh (gốc dưới-trái) sang y thế giới: chỉ cần nhân scale. */
+    private float worldY(float imgY) { return imgY * info.scale; }
 
-    /** Tâm ngang (pixel) nơi P2 xuất hiện. */
-    public float getP2SpawnX(float screenW) { return screenW * info.p2SpawnXRatio; }
+    /** Độ cao mặt đất chính (pixel thế giới). */
+    public float getGroundY() { return worldY(info.groundY); }
 
-    /**
-     * Vẽ ảnh nền, kéo giãn phủ kín màn hình (w x h). Gọi giữa batch.begin() ... end().
-     * Map tạm (không có ảnh) thì bỏ qua, nền đen do ScreenUtils.clear() ở GameScreen lo.
-     */
-    public void renderBackground(SpriteBatch batch, float w, float h) {
-        if (background != null) batch.draw(background, 0, 0, w, h);
+    /** Tâm ngang (pixel thế giới) nơi P1 xuất hiện. */
+    public float getP1SpawnX() { return info.p1SpawnX * info.scale; }
+
+    /** Tâm ngang (pixel thế giới) nơi P2 xuất hiện. */
+    public float getP2SpawnX() { return info.p2SpawnX * info.scale; }
+
+    /** Vẽ ảnh nền đúng kích thước thế giới. Gọi giữa batch.begin() ... end(). */
+    public void renderBackground(SpriteBatch batch) {
+        if (background != null) batch.draw(background, 0, 0, worldW, worldH);
     }
 
     /**
-     * Vẽ đường đỏ làm mặt đất tạm. Gọi giữa shapeRenderer.begin(Filled) ... end().
-     * Chỉ vẽ khi map CHƯA có ảnh; có ảnh rồi thì tự tắt, không cần sửa GameScreen.
-     * Đường đỏ nằm ngay DƯỚI groundY (chân nhân vật đứng trên mép trên của đường).
+     * Vẽ đường đỏ làm mặt đất tạm (map chưa có ảnh) và, nếu DEBUG_PLATFORMS bật,
+     * vẽ thêm mặt đất chính (đỏ) + các platform (xanh lá) lên trên ảnh.
+     * Gọi giữa shapeRenderer.begin(Filled) ... end().
      */
-    public void renderPlaceholder(ShapeRenderer sr, float w, float h) {
-        if (background != null) return;
+    public void renderPlaceholder(ShapeRenderer sr) {
+        if (background != null && !DEBUG_PLATFORMS) return;
+
         sr.setColor(Color.RED);
-        sr.rect(0, getGroundY(h) - GROUND_THICKNESS, w, GROUND_THICKNESS);
+        sr.rect(0, getGroundY() - GROUND_THICKNESS, worldW, GROUND_THICKNESS);
+
+        if (DEBUG_PLATFORMS) {
+            sr.setColor(Color.GREEN);
+            for (float[] p : info.platforms) {
+                sr.rect(p[0] * info.scale, worldY(p[2]) - GROUND_THICKNESS,
+                    (p[1] - p[0]) * info.scale, GROUND_THICKNESS);
+            }
+        }
+    }
+
+    /**
+     * One-way platform: chỉ đỡ khi nhân vật RƠI XUỐNG, không chặn khi nhảy lên.
+     *
+     * @param x         tâm ngang của nhân vật (pixel thế giới)
+     * @param prevFeetY độ cao chân ở frame trước
+     * @param feetY     độ cao chân ở frame này (sau khi di chuyển)
+     * @return độ cao mặt platform nếu chân vừa đi xuyên từ trên xuống dưới nó, ngược lại -1
+     */
+    public float findLandingY(float x, float prevFeetY, float feetY) {
+        float best = -1f;
+        for (float[] p : info.platforms) {
+            float py = worldY(p[2]);
+            boolean inside = x >= p[0] * info.scale && x <= p[1] * info.scale;
+            boolean crossed = prevFeetY >= py && feetY <= py;   // trước ở trên/ngang, giờ ở dưới/ngang
+            if (inside && crossed && py > best) best = py;      // trúng nhiều cái thì lấy cái cao nhất
+        }
+        return best;
+    }
+
+    /**
+     * Có platform nào ở độ cao y (pixel thế giới) mà x nằm trong khoảng của nó không.
+     * Dùng để biết nhân vật còn đứng trên platform hay đã đi ra khỏi mép.
+     */
+    public boolean hasPlatformAt(float x, float y) {
+        for (float[] p : info.platforms) {
+            if (Math.abs(worldY(p[2]) - y) < 0.5f
+                && x >= p[0] * info.scale && x <= p[1] * info.scale) return true;
+        }
+        return false;
+    }
+
+    /** Đổi điểm thế giới sang pixel ảnh (gốc dưới-trái) để in debug. Trả về {x, y}. */
+    public float[] worldToImagePixel(float wx, float wy) {
+        return new float[] { wx / info.scale, wy / info.scale };
     }
 }

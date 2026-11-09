@@ -9,6 +9,7 @@ import com.HUY.JumpUltimateStars.character.stats.Move;
 import com.HUY.JumpUltimateStars.character.stats.Skill;
 import com.HUY.JumpUltimateStars.effect.Effect;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
+import com.HUY.JumpUltimateStars.map.MapData;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
@@ -24,6 +25,12 @@ import com.badlogic.gdx.utils.Array;
  *  - Effect:           Fighter tự giữ danh sách effect do mình sinh ra (phi tiêu...).
  *                      Effect tự bay, tự vẽ, tự tính dame; Fighter chỉ gọi ra đúng frame
  *                      và cập nhật/vẽ chúng.
+ *  - MapData:          để biết platform (vùng đứng thêm ngoài mặt đất chính)
+ *
+ * Sàn: groundY là SÀN ĐANG ĐỨNG (mặt đất chính hoặc 1 platform), mainGroundY là mặt đất chính.
+ * Khi đang ở trên không (nhảy / rơi / skill trên không) thì groundY luôn = mainGroundY,
+ * nên AirSkill vẫn tính airY so với mặt đất chính như cũ. Chỉ lúc hạ cánh lên platform
+ * thì groundY mới đổi sang độ cao platform (và airY = 0).
  *
  * State machine:
  *
@@ -37,8 +44,9 @@ import com.badlogic.gdx.utils.Array;
  *   FREE / RECOVERY / LAND ──GIỮ S──> DEFEND ──thả S──> FREE
  *   AIR ──bấm J (1 lần mỗi lần nhảy)──> AIR_ATTACK (đứng yên giữa trời) ──hết──> AIR (rơi tiếp)
  *   AIR ──bấm U (1 lần mỗi lần nhảy)──> AIR_SKILL (mỗi loại skill tự quyết cách di chuyển)
- *         ──xong, đang ở đất──> LAND   |   ──xong, còn trên không──> AIR (rơi tiếp)
+ *         ──xong, đang ở đất / platform──> LAND   |   ──xong, còn trên không──> AIR (rơi tiếp)
  *   AIR_ATTACK ──bấm U (sau frame gây dame + vài frame)──> AIR_SKILL   (U ngắt J trên không, thành combo)
+ *   Đang đứng trên platform mà đi ra khỏi mép ──> AIR (rơi)
  */
 public class Fighter {
 
@@ -80,8 +88,11 @@ public class Fighter {
     // ===================== VỊ TRÍ & HƯỚNG MẶT =====================
 
     private float centerX;
-    private float groundY;
+    private float groundY;          // SÀN ĐANG ĐỨNG (mặt đất chính hoặc platform)
+    private float mainGroundY;      // mặt đất chính của map
     private boolean facingLeft;
+
+    private MapData map;            // để hỏi platform; null thì chỉ có mặt đất chính
 
     private State state = State.FREE;
 
@@ -107,7 +118,7 @@ public class Fighter {
 
     // ===================== NHẢY / LƯỚT =====================
 
-    private float airY;             // độ cao so với mặt đất
+    private float airY;             // độ cao so với sàn đang đứng (groundY)
     private float velY;
     private int jumpsUsed;
     private float landTimer;
@@ -117,6 +128,7 @@ public class Fighter {
     private int dashDir;
     private float dashCooldown;
     private boolean dashInAir;
+    private int airDashesUsed;      // số lần đã lướt trên không trong lượt nhảy này (reset khi chạm đất)
 
     // ===================== ĐÁNH TRÊN KHÔNG =====================
 
@@ -190,7 +202,7 @@ public class Fighter {
      * Mỗi frame: đọc input, chạy state machine, cập nhật effect, giữ nhân vật trong màn hình.
      *
      * @param delta   giây từ frame trước
-     * @param screenW chiều rộng màn hình
+     * @param screenW chiều rộng THẾ GIỚI (= ảnh map), dùng để giữ nhân vật trong map
      */
     public void update(float delta, float screenW) {
         if (dashCooldown > 0f) dashCooldown -= delta;
@@ -233,6 +245,7 @@ public class Fighter {
 
         float halfW = character.getRefWidth() / 2f;
         centerX = MathUtils.clamp(centerX, halfW, screenW - halfW);
+        checkPlatformEdge();
         character.setCenter(centerX, groundY + airY);
     }
 
@@ -242,6 +255,32 @@ public class Fighter {
             Effect e = effects.get(i);
             e.update(delta);
             if (!e.isActive()) effects.removeIndex(i);
+        }
+    }
+
+    // ===================== PLATFORM =====================
+
+    /**
+     * Rời sàn hiện tại (platform): quy đổi airY về tính từ mặt đất chính, groundY về mặt đất chính.
+     * Vị trí thật trên màn hình (groundY + airY) không đổi.
+     */
+    private void leaveFloor() {
+        airY += groundY - mainGroundY;
+        groundY = mainGroundY;
+    }
+
+    /** Đang đứng trên platform mà đi ra khỏi mép thì chuyển sang AIR và rơi. */
+    private void checkPlatformEdge() {
+        if (map == null || groundY == mainGroundY) return;
+        boolean inAir = state == State.AIR || state == State.AIR_ATTACK || state == State.AIR_SKILL
+            || (state == State.DASH && dashInAir);
+        if (inAir) return;
+        if (!map.hasPlatformAt(centerX, groundY)) {
+            leaveFloor();
+            velY = 0f;
+            jumpsUsed = Math.max(jumpsUsed, 1);   // rơi khỏi mép tính như đã dùng 1 lần nhảy
+            state = State.AIR;
+            character.playAnimation("fall", FALL_FRAME_DURATION);
         }
     }
 
@@ -407,15 +446,16 @@ public class Fighter {
     // ===================== NHẢY / RƠI / CHẠM ĐẤT =====================
 
     private void startJump() {
+        leaveFloor();   // nhảy từ platform thì airY tính lại từ mặt đất chính
         jumpsUsed++;
         velY = stats.jumpSpeed;
         state = State.AIR;
         character.playFromStart("jump", JUMP_FRAME_DURATION);
     }
 
-    /** Trên không: lướt, skill U, đánh, nhảy kép, đi ngang, chịu trọng lực. Chạm đất thì sang LAND. */
+    /** Trên không: lướt, skill U, đánh, nhảy kép, đi ngang, chịu trọng lực. Chạm đất / platform thì sang LAND. */
     private void updateAir(float delta, boolean atk, boolean jump, boolean dash, boolean airSkillU) {
-        if (dash) { startDash(); return; }
+        if (dash && airDashesUsed < stats.maxAirDashes) { startDash(); return; }   // hết lượt lướt trên không thì bỏ qua
         // Ưu tiên: lướt > skill U > đánh trên không > nhảy kép
         if (airSkillU) { startAirSkill(); return; }
         // Đánh trên không chỉ được 1 lần mỗi lượt nhảy
@@ -424,8 +464,20 @@ public class Fighter {
 
         moveHorizontal(delta);
 
+        float prevFeet = groundY + airY;   // độ cao chân TRƯỚC khi áp trọng lực
         velY -= stats.gravity * delta;
         airY += velY * delta;
+
+        // Hạ cánh lên platform: chỉ khi đang rơi và chân vừa xuyên qua mặt platform
+        if (map != null && velY <= 0f) {
+            float landY = map.findLandingY(centerX, prevFeet, groundY + airY);
+            if (landY >= 0f) {
+                groundY = landY;
+                airY = 0f;
+                touchGround();
+                return;
+            }
+        }
 
         if (airY <= 0f) {
             touchGround();
@@ -440,6 +492,7 @@ public class Fighter {
         airY = 0f;
         velY = 0f;
         jumpsUsed = 0;
+        airDashesUsed = 0;       // chạm đất / hạ cánh platform -> lướt trên không được lại
         airAttackUsed = false;   // chạm đất -> lượt nhảy sau được đánh / dùng skill lại
         airSkillUsed = false;
         startLand();
@@ -532,7 +585,8 @@ public class Fighter {
     /**
      * Đang tung skill trên không (khóa cứng). Fighter chỉ cập nhật thời gian rồi giao cho AirSkill.update()
      * quyết định di chuyển / bắn effect / gây dame, sau đó chép vị trí mới về.
-     * Skill báo xong thì: đang ở đất -> LAND, còn trên không -> AIR (rơi tiếp).
+     * Nếu skill đi xuống mà xuyên qua mặt platform thì dừng lại trên platform (coi như skill kết thúc).
+     * Skill báo xong thì: đang ở đất / platform -> LAND, còn trên không -> AIR (rơi tiếp).
      */
     private void updateAirSkill(float delta) {
         airSkillTime += delta;
@@ -545,10 +599,23 @@ public class Fighter {
         airCtx.frame = Math.min((int) (airSkillTime / airSkill.frameDuration), airSkillFrameCount - 1);
         airCtx.animDone = airSkillTime >= airSkillFrameCount * airSkill.frameDuration;
 
+        float prevFeet = groundY + airY;   // độ cao chân TRƯỚC khi skill di chuyển
+
         boolean finished = airSkill.update(airCtx, delta);
 
         centerX = airCtx.x;
         airY = airCtx.airY;
+
+        // Skill đang đi xuống mà xuyên qua mặt platform -> dừng lại trên platform
+        boolean landedOnPlatform = false;
+        if (map != null && groundY + airY < prevFeet) {
+            float landY = map.findLandingY(centerX, prevFeet, groundY + airY);
+            if (landY >= 0f) {
+                groundY = landY;
+                airY = 0f;
+                landedOnPlatform = true;
+            }
+        }
 
         // Skill báo hitbox đang bật (c.hit) mỗi frame; chỉ tính dame 1 lần, trúng rồi thì thôi
         if (airCtx.hitDamage > 0 && !airSkillHitDone) {
@@ -556,7 +623,7 @@ public class Fighter {
         }
         airCtx.hitDamage = 0;
 
-        if (finished) {
+        if (finished || landedOnPlatform) {
             skillCooldown = airSkill.cooldown;
             if (airY <= 0f) {
                 touchGround();
@@ -572,7 +639,10 @@ public class Fighter {
     private void startDash() {
         if (state == State.DASH) return;
         dashInAir = (state == State.AIR);   // phải đọc TRƯỚC khi đổi state
-        if (dashInAir) velY = 0f;
+        if (dashInAir) {
+            velY = 0f;
+            airDashesUsed++;                // tính 1 lần lướt trên không
+        }
 
         dashDir = facingLeft ? -1 : 1;
         dashTimer = stats.dashDuration;
@@ -630,12 +700,25 @@ public class Fighter {
         return effects;
     }
 
+    /** Đặt mặt đất chính của map (cũng là sàn đang đứng lúc mới đặt). */
     public void setGroundY(float groundY) {
+        this.mainGroundY = groundY;
         this.groundY = groundY;
     }
 
-    public void onResize(float oldW, float newW) {
-        if (oldW > 0) centerX *= newW / oldW;
+    /** Gắn map để Fighter biết platform. Gọi 1 lần trong GameScreen.show(). */
+    public void setMap(MapData map) {
+        this.map = map;
+    }
+
+    /** Tâm ngang (pixel thế giới), để camera theo dõi. */
+    public float getCenterX() {
+        return centerX;
+    }
+
+    /** Độ cao chân (pixel thế giới) = sàn đang đứng + độ cao trên không, để camera theo dõi. */
+    public float getFeetY() {
+        return groundY + airY;
     }
 
     /** Giải phóng Texture của effect còn sống. Gọi khi thoát trận. */
