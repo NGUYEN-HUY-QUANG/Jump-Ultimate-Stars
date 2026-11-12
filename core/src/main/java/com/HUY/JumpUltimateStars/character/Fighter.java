@@ -10,8 +10,11 @@ import com.HUY.JumpUltimateStars.character.stats.Skill;
 import com.HUY.JumpUltimateStars.effect.Effect;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
 import com.HUY.JumpUltimateStars.map.MapData;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
 
@@ -26,6 +29,7 @@ import com.badlogic.gdx.utils.Array;
  *                      Effect tự bay, tự vẽ, tự tính dame; Fighter chỉ gọi ra đúng frame
  *                      và cập nhật/vẽ chúng.
  *  - MapData:          để biết platform (vùng đứng thêm ngoài mặt đất chính)
+ *  - Marker:           ảnh P1 / P2 vẽ trên đầu để phân biệt 2 nhân vật (đi theo nhân vật)
  *
  * Sàn: groundY là SÀN ĐANG ĐỨNG (mặt đất chính hoặc 1 platform), mainGroundY là mặt đất chính.
  * Khi đang ở trên không (nhảy / rơi / skill trên không) thì groundY luôn = mainGroundY,
@@ -66,6 +70,11 @@ public class Fighter {
     // Skill U trên không ngắt được đòn J trên không sau frame gây dame bao nhiêu frame (0 = ngắt ngay)
     private static final int AIR_SKILL_CANCEL_DELAY_FRAMES = 5;
 
+    // Marker P1 / P2 trên đầu
+    private static final float MARKER_SCALE = 1f;        // phóng to / thu nhỏ ảnh marker
+    private static final float MARKER_GAP = 6f;          // khoảng cách từ đỉnh đầu lên marker (pixel thế giới)
+    private static final float MARKER_HEAD_OFFSET = 0f;  // chỉnh nếu sprite có viền trống phía trên đầu (âm = hạ xuống)
+
     // FREE: tự do | ATTACK: đang ra đòn | RECOVERY: nghỉ sau đòn | AIR: trên không
     // LAND: chạm đất (không khóa) | DASH: lướt (khóa cứng) | SKILL: tung skill (khóa cứng)
     // DEFEND: đang giữ thủ (đứng im, thả phím mới thoát)
@@ -84,6 +93,10 @@ public class Fighter {
 
     // Effect do Fighter này sinh ra. Fighter sở hữu, tự dispose khi xong
     private final Array<Effect> effects = new Array<>();
+
+    // Marker P1 / P2 trên đầu (Fighter sở hữu texture này, dispose trong dispose())
+    private Texture markerTex;      // null nếu chưa gắn marker
+    private float headHeight;       // chiều cao nhân vật (pixel thế giới), tính 1 lần trong constructor
 
     // ===================== VỊ TRÍ & HƯỚNG MẶT =====================
 
@@ -173,6 +186,10 @@ public class Fighter {
         character = new Character(animManager, charId);
         character.setScale(stats.scale);
         character.playAnimation("idle", IDLE_FRAME_DURATION);
+
+        // Chiều cao nhân vật (để đặt marker trên đầu): frame đầu của idle * scale
+        TextureRegion idle0 = animManager.get(charId, "idle", IDLE_FRAME_DURATION).getKeyFrames()[0];
+        headHeight = idle0.getRegionHeight() * stats.scale;
 
         // Load sẵn nhảy / rơi / chạm đất / lướt / thủ / skill (thiếu asset sẽ lỗi ngay lúc vào trận)
         animManager.get(charId, "jump", JUMP_FRAME_DURATION, Animation.PlayMode.NORMAL);
@@ -695,6 +712,23 @@ public class Fighter {
         for (int i = 0; i < effects.size; i++) effects.get(i).draw(batch);
     }
 
+    /** Gắn ảnh marker (P1.png / P2.png) vẽ trên đầu nhân vật. Fighter sở hữu texture này. */
+    public void setMarker(String path) {
+        if (markerTex != null) markerTex.dispose();
+        markerTex = new Texture(Gdx.files.internal(path));
+        markerTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+    }
+
+    /** Vẽ marker trên đầu, đi theo nhân vật (không lật theo hướng mặt). */
+    public void drawMarker(SpriteBatch batch) {
+        if (markerTex == null) return;
+        float w = markerTex.getWidth() * MARKER_SCALE;
+        float h = markerTex.getHeight() * MARKER_SCALE;
+        float x = centerX - w / 2f;
+        float y = getFeetY() + headHeight + MARKER_HEAD_OFFSET + MARKER_GAP;
+        batch.draw(markerTex, x, y, w, h);
+    }
+
     /** Effect đang sống, để GameScreen check va chạm với đối thủ. */
     public Array<Effect> getEffects() {
         return effects;
@@ -721,9 +755,13 @@ public class Fighter {
         return groundY + airY;
     }
 
-    /** Giải phóng Texture của effect còn sống. Gọi khi thoát trận. */
+    /** Giải phóng Texture của effect còn sống và marker. Gọi khi thoát trận. */
     public void dispose() {
         for (Effect e : effects) e.cancel();
         effects.clear();
+        if (markerTex != null) {
+            markerTex.dispose();
+            markerTex = null;
+        }
     }
 }
