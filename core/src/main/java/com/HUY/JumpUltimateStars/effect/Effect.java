@@ -18,6 +18,9 @@ public interface Effect {
     /** Đưa hurtbox của đối thủ vào. Trả về dame của lần này, 0 nếu không trúng. */
     int checkHit(Rectangle hurtbox);
 
+    /** true = trúng thì đối thủ bị knockout, false = chỉ hit. Effect nào knockout thì override. */
+    default boolean isKnockdown() { return false; }
+
     /** false khi đã xong hoặc bị hủy. */
     boolean isActive();
 

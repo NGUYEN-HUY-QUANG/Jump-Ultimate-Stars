@@ -106,6 +106,10 @@ public class Character {
         stateTime += delta;
     }
 
+    public boolean isAnimationFinished() {
+        return currentAnim != null && currentAnim.isAnimationFinished(stateTime);
+    }
+
     // ==== Neo vị trí cho chế độ trận đấu ====
 
     /**

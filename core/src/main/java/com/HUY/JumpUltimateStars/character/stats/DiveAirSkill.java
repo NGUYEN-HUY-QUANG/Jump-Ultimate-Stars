@@ -14,21 +14,30 @@ public class DiveAirSkill extends AirSkill {
     private final int damage;
     private final float angleDeg;   // 0 = ngang, 60 = chéo xuống, 90 = thẳng xuống
     private final float speed;      // px/s theo đường chéo
+    private final boolean knockdown;   // trúng thì knockout hay chỉ hit
+
+    /** Lao xuống, chỉ hit (không knockout). */
+    public DiveAirSkill(String action, float frameDuration, float cooldown,
+                        int damage, float angleDeg, float speed) {
+        this(action, frameDuration, cooldown, damage, angleDeg, speed, false);
+    }
 
     /**
      * @param action        tên thư mục + tiền tố ảnh (vd "U_AIR")
      * @param frameDuration giây mỗi frame
      * @param cooldown      cooldown sau khi kết thúc (giây)
-     * @param damage        sát thương khi chạm đất
+     * @param damage        sát thương
      * @param angleDeg      góc lao so với mặt đất (độ)
      * @param speed         tốc độ lao (px/s)
+     * @param knockdown     true = trúng thì đối thủ bị knockout
      */
     public DiveAirSkill(String action, float frameDuration, float cooldown,
-                        int damage, float angleDeg, float speed) {
+                        int damage, float angleDeg, float speed, boolean knockdown) {
         super(action, frameDuration, cooldown);
         this.damage = damage;
         this.angleDeg = angleDeg;
         this.speed = speed;
+        this.knockdown = knockdown;
     }
 
     @Override
@@ -42,7 +51,7 @@ public class DiveAirSkill extends AirSkill {
         c.x += c.velX * delta;
         c.airY += c.velY * delta;
 
-        c.hit(damage);   // báo hitbox đang bật mỗi frame, Fighter lo chuyện chỉ tính dame 1 lần
+        c.hit(damage, knockdown);   // báo hitbox đang bật mỗi frame, Fighter lo chuyện chỉ tính dame 1 lần
 
         return c.airY <= 0f;   // chạm đất -> kết thúc
     }

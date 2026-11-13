@@ -26,7 +26,8 @@ public class SmallShuriken implements Effect {
     private static final float SCALE = 2f;
     private static final int COUNT = 3;                 // số viên
     private static final float SPACING_Y = 40f;         // khoảng cách dọc giữa 2 viên
-    private static final int DAMAGE = 8;
+    private static final int DAMAGE = 20;
+    private static final boolean KNOCKDOWN = false;     // true = trúng thì knockout, false = chỉ hit
 
     private final Array<Texture> textures = new Array<>();
     private final Animation<TextureRegion> anim;
@@ -102,6 +103,9 @@ public class SmallShuriken implements Effect {
         }
         return 0;
     }
+
+    @Override
+    public boolean isKnockdown() { return KNOCKDOWN; }
 
     @Override
     public boolean isActive() { return active; }

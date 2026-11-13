@@ -4,13 +4,15 @@ import com.HUY.JumpUltimateStars.effect.Effect;
 
 /**
  * Dữ liệu của 1 skill (hiện là phím U). KHÔNG chứa logic: việc chạy skill nằm ở Fighter,
- * số liệu của effect (dame, tốc độ...) nằm trong class effect.
+ * số liệu của effect (dame, tốc độ, knockout...) nằm trong class effect.
  * Ảnh nhân vật khi tung skill: characters/{charId}/{action}/{action}_{i}.png (vd "U").
  * Mọi chỉ số frame đều đếm từ 0, giống tên file ảnh.
  *
  * 2 kiểu, dùng constructor tương ứng:
  *  - Cận chiến nhiều hit (Goku): nhân vật tự gây dame ở các hitFrames.
- *  - Gọi effect (Naruto): tới spawnFrame thì sinh effect, effect mới là thứ gây dame.
+ *    Có thể bật knockdownOnLastHit: hit cuối knockout, các hit giữa chỉ là hit thường.
+ *  - Gọi effect (Naruto): tới spawnFrame thì sinh effect, effect mới là thứ gây dame
+ *    (effect tự quyết knockout qua Effect.isKnockdown()).
  */
 public class Skill {
 
@@ -27,17 +29,27 @@ public class Skill {
     public final int damage;          // dame mỗi hit
     public final int[] hitFrames;     // các frame gây dame, tăng dần
 
+    /** true = chỉ hit CUỐI trong hitFrames knockout, các hit trước chỉ là hit thường. */
+    public final boolean knockdownOnLastHit;
+
     // ----- Gọi effect -----
     public final Effect.Factory effect;   // null = skill không có effect
     public final int spawnFrame;          // frame sinh effect
 
-    /** Skill cận chiến nhiều hit. */
+    /** Skill cận chiến nhiều hit, không knockout. */
     public Skill(String action, float frameDuration, int damage, int[] hitFrames, float cooldown) {
+        this(action, frameDuration, damage, hitFrames, cooldown, false);
+    }
+
+    /** Skill cận chiến nhiều hit, có thể knockout ở hit cuối. */
+    public Skill(String action, float frameDuration, int damage, int[] hitFrames, float cooldown,
+                 boolean knockdownOnLastHit) {
         this.action = action;
         this.frameDuration = frameDuration;
         this.cooldown = cooldown;
         this.damage = damage;
         this.hitFrames = hitFrames;
+        this.knockdownOnLastHit = knockdownOnLastHit;
         this.effect = null;
         this.spawnFrame = 0;
     }
@@ -50,6 +62,7 @@ public class Skill {
         this.cooldown = cooldown;
         this.damage = 0;
         this.hitFrames = new int[0];
+        this.knockdownOnLastHit = false;
         this.effect = effect;
         this.spawnFrame = spawnFrame;
     }

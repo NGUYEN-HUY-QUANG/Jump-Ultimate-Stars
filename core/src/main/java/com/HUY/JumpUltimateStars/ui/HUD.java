@@ -8,6 +8,8 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.TextureData;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
@@ -20,80 +22,72 @@ import com.badlogic.gdx.utils.IntArray;
  *
  *   [khung+avatar P1][ hp_bar P1 ][ time_bar ][ hp_bar P2 ][khung+avatar P2]
  *
- * Các thành phần dính liền nhau, cả hàng tự scale cho vừa chiều rộng cửa sổ và căn giữa.
+ * Thanh máu gồm 2 rect nằm dưới hp_bar.png (hp_bar.png và khung đè lên):
+ *   - rect ĐỎ  : dài tới mức "máu trễ" (trail), tụt dần về máu thật sau TRAIL_DELAY giây
+ *   - rect XANH: dài tới máu thật, vẽ đè lên đỏ (phần đỏ lộ ra = máu vừa mất)
+ * Số máu còn lại nằm sát mép phải của thanh P1 (trừ HP_TEXT_PAD), P2 đối xứng (mép trái).
  *
- * Góc dưới màn hình: khung energy của mỗi bên
- *
- *   [energy P1][energy_bar P1]                    [energy_bar P2][energy P2]
- *
- * (hiện mới vẽ khung, chưa có logic năng lượng chạy bên trong)
- *
- * Tài nguyên dùng:
- *   HUD/avatar.png     khung avatar (xem FRAME_PATH)
- *   HUD/hp_bar.png     thanh máu (bản của P1: mép trong, sát time_bar, nằm bên phải)
- *   HUD/time_bar.png   thanh thời gian ở giữa
- *   HUD/time.png       vẽ đè lên time_bar
- *   HUD/energy.png     ô energy (bên trong cùng, sát mép màn hình)
- *   HUD/energy_bar.png thanh energy nằm cạnh ô energy
- *   avatar nhân vật: CharacterData.avatar (TextureRegion, cùng ảnh CharacterSlot dùng)
+ * Góc dưới màn hình: khung energy của mỗi bên (mới vẽ khung, chưa có logic).
  *
  * Cách dùng trong GameScreen:
  *   show():    hud = new HUD(p1Id, p2Id, p1Avatar, p2Avatar); hud.resize(w, h);
- *   render():  vẽ SAU CÙNG (sau nhân vật + effect): hud.render(batch);
+ *   render():  hud.update(delta); ... vẽ SAU CÙNG: hud.render(batch);
  *   resize():  hud.resize(width, height);
  *   dispose(): hud.dispose();
  *   Khi máu đổi: hud.setP1Hp(hp) / hud.setP2Hp(hp)
  */
 public class HUD {
 
-    // ===================== ĐƯỜNG DẪN (chỉnh cho đúng thư mục asset của m) =====================
+    // ===================== ĐƯỜNG DẪN =====================
 
     private static final String FRAME_PATH = "HUD/avatar.png";
     private static final String HP_BAR_PATH = "HUD/hp_bar.png";
     private static final String TIME_BAR_PATH = "HUD/time_bar.png";
-    private static final String TIME_OVERLAY_PATH = "HUD/time.png";   // vẽ đè lên giữa time_bar
+    private static final String TIME_OVERLAY_PATH = "HUD/time.png";
     private static final String ENERGY_ICON_PATH = "HUD/energy.png";
     private static final String ENERGY_BAR_PATH = "HUD/energy_bar.png";
 
     // ===================== BỐ CỤC CHUNG =====================
 
-    /** Cả hàng chiếm tối đa bao nhiêu phần chiều rộng cửa sổ (1 = kín hết trừ lề). */
     private static final float WIDTH_RATIO = 1f;
-    /** Lề trái/phải (pixel màn hình). */
     private static final float MARGIN_X = 8f;
-    /** Lề trên (pixel màn hình). */
     private static final float MARGIN_TOP = 8f;
-    /** Hàng HUD cao tối đa bao nhiêu phần chiều cao cửa sổ (tránh quá to trên màn hình rộng). */
     private static final float MAX_HEIGHT_RATIO = 0.16f;
-    /** Phóng to thêm toàn bộ HUD sau khi đã tự scale (1 = như cũ, 1.2 = to hơn 20%). */
     private static final float HUD_SCALE_MULT = 1.2f;
 
     // ===================== CHỈNH THANH MÁU & time.png =====================
 
-    /** Độ dài thanh máu (nhân với chiều rộng ảnh gốc, 1 = giữ nguyên, 1.3 = dài hơn 30%). Cao không đổi. */
     private static final float HP_STRETCH_X = 1f;
 
-    // Offset tính bằng pixel của ẢNH GỐC (tự nhân theo scale).
-    // X dương = dịch vào phía time_bar (P2 tự đảo chiều), âm = ra ngoài. Y dương = lên, âm = xuống.
-    private static final float FRAME_OFFSET_X = 0f;   // khung + avatar
+    private static final float FRAME_OFFSET_X = 0f;
     private static final float FRAME_OFFSET_Y = 0f;
 
-    private static final float HP_OFFSET_X = 0f;      // thanh máu
+    private static final float HP_OFFSET_X = 0f;
     private static final float HP_OFFSET_Y = -5f;
 
-    private static final float TIME_OFFSET_X = 0f;    // time_bar
+    private static final float TIME_OFFSET_X = 0f;
     private static final float TIME_OFFSET_Y = -5f;
 
-    /** time.png mặc định nằm chính giữa time_bar, offset tính từ chính giữa đó. */
     private static final float TIME_OVERLAY_OFFSET_X = 0f;
     private static final float TIME_OVERLAY_OFFSET_Y = 0f;
 
-    /** Màu phần máu đã mất (vẽ thanh đầy bằng màu này làm nền, phần máu còn lại vẽ đè lên). */
-    private static final Color EMPTY_TINT = new Color(0.2f, 0.2f, 0.2f, 1f);
+    // ===================== MÁU (2 RECT + SỐ) =====================
+
+    private static final Color HP_FILL_COLOR = new Color(0.2f, 0.8f, 0.2f, 1f);    // xanh: máu thật
+    private static final Color HP_TRAIL_COLOR = new Color(0.85f, 0.15f, 0.15f, 1f); // đỏ: máu vừa mất
+
+    /** Chờ bao lâu sau lần dính dame cuối thì đỏ bắt đầu tụt (giây). */
+    private static final float TRAIL_DELAY = 0.4f;
+    /** Tốc độ đỏ tụt, tính theo % maxHp mỗi giây (1 = hết cả thanh trong 1s). */
+    private static final float TRAIL_SPEED = 0.8f;
+
+    /** Số máu cách mép (pixel màn hình): P1 cách mép phải của thanh, P2 cách mép trái. */
+    private static final float HP_TEXT_PAD = 20f;
+    /** Chiều cao chữ so với chiều cao thanh máu (0.4 = 40%). */
+    private static final float HP_TEXT_RATIO = 0.4f;
 
     // ===================== ENERGY (góc dưới) =====================
 
-    /** Lề dưới + lề trái/phải của cụm energy (pixel màn hình). */
     private static final float ENERGY_MARGIN = 12f;
 
     // ===================== DỮ LIỆU =====================
@@ -104,17 +98,22 @@ public class HUD {
     private final Texture timeOverlayTex;
     private final Texture energyIconTex;
     private final Texture energyBarTex;
+    private final Texture whitePx;      // 1 pixel trắng để vẽ rect
     private final Texture avatar1;
     private final Texture avatar2;      // null khi chơi 1 người
+
+    private final BitmapFont font = new BitmapFont();
+    private final GlyphLayout glyph = new GlyphLayout();
 
     private final float maxHp1;
     private final float maxHp2;
     private float hp1;
     private float hp2;
+    private float trail1, trail2;           // máu trễ (đơn vị HP)
+    private float trailTimer1, trailTimer2; // đồng hồ chờ trước khi đỏ tụt
 
     private final OrthographicCamera camera = new OrthographicCamera();
 
-    // Toạ độ + kích thước đã tính sẵn trong layout() (pixel màn hình)
     private float frameW, frameH, hpW, hpH, timeW, timeH;
     private float overlayW, overlayH;
     private float frameY, hpY, timeY, overlayY;
@@ -124,21 +123,21 @@ public class HUD {
     private float eIconW, eIconH, eBarW, eBarH, eIconY, eBarY;
     private float p1EIconX, p1EBarX, p2EIconX, p2EBarX;
 
-    /**
-     * @param p1Id         id nhân vật P1 (để lấy maxHp)
-     * @param p2Id         id nhân vật P2, null nếu chơi 1 người (khi đó chỉ vẽ phía P1 + thanh time)
-     * @param p1Avatar     CharacterData.avatar của P1 (HUD chỉ đọc pixel, không dispose texture này)
-     * @param p2Avatar     CharacterData.avatar của P2, null nếu chơi 1 người
-     */
     public HUD(String p1Id, String p2Id, TextureRegion p1Avatar, TextureRegion p2Avatar) {
         frameTex = new Texture(Gdx.files.internal(FRAME_PATH));
-        frameTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest); // khung pixel art
+        frameTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         hpTex = new Texture(Gdx.files.internal(HP_BAR_PATH));
         timeTex = new Texture(Gdx.files.internal(TIME_BAR_PATH));
         timeOverlayTex = new Texture(Gdx.files.internal(TIME_OVERLAY_PATH));
         energyIconTex = new Texture(Gdx.files.internal(ENERGY_ICON_PATH));
         energyIconTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         energyBarTex = new Texture(Gdx.files.internal(ENERGY_BAR_PATH));
+
+        Pixmap px = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        px.setColor(Color.WHITE);
+        px.fill();
+        whitePx = new Texture(px);
+        px.dispose();
 
         FileHandle frameFile = Gdx.files.internal(FRAME_PATH);
         avatar1 = buildAvatar(frameFile, p1Avatar, false);
@@ -148,18 +147,38 @@ public class HUD {
         maxHp2 = p2Id != null ? CharacterStatsRegistry.get(p2Id).maxHp : 1f;
         hp1 = maxHp1;
         hp2 = maxHp2;
+        trail1 = hp1;
+        trail2 = hp2;
     }
 
     // ===================== API =====================
 
     /** Đặt máu hiện tại của P1 (tự kẹp trong 0..maxHp). */
     public void setP1Hp(float hp) {
-        hp1 = MathUtils.clamp(hp, 0f, maxHp1);
+        float nh = MathUtils.clamp(hp, 0f, maxHp1);
+        if (nh < hp1) trailTimer1 = TRAIL_DELAY;   // vừa dính dame -> reset chờ
+        if (nh > trail1) trail1 = nh;              // hồi máu: kéo đỏ lên theo
+        hp1 = nh;
     }
 
     /** Đặt máu hiện tại của P2 (tự kẹp trong 0..maxHp). */
     public void setP2Hp(float hp) {
-        hp2 = MathUtils.clamp(hp, 0f, maxHp2);
+        float nh = MathUtils.clamp(hp, 0f, maxHp2);
+        if (nh < hp2) trailTimer2 = TRAIL_DELAY;
+        if (nh > trail2) trail2 = nh;
+        hp2 = nh;
+    }
+
+    /** Gọi mỗi frame (trước render) để rect đỏ tụt dần về máu thật. */
+    public void update(float delta) {
+        trailTimer1 -= delta;
+        if (trailTimer1 <= 0f && trail1 > hp1) {
+            trail1 = Math.max(hp1, trail1 - TRAIL_SPEED * maxHp1 * delta);
+        }
+        trailTimer2 -= delta;
+        if (trailTimer2 <= 0f && trail2 > hp2) {
+            trail2 = Math.max(hp2, trail2 - TRAIL_SPEED * maxHp2 * delta);
+        }
     }
 
     /** Gọi khi cửa sổ đổi kích thước (và 1 lần trong show()). */
@@ -174,13 +193,12 @@ public class HUD {
         batch.begin();
         batch.setColor(Color.WHITE);
 
-        drawSide(batch, avatar1, p1FrameX, p1BarX, false, hp1 / maxHp1);
-        if (avatar2 != null) drawSide(batch, avatar2, p2FrameX, p2BarX, true, hp2 / maxHp2);
+        drawSide(batch, avatar1, p1FrameX, p1BarX, false, hp1, trail1, maxHp1);
+        if (avatar2 != null) drawSide(batch, avatar2, p2FrameX, p2BarX, true, hp2, trail2, maxHp2);
 
         batch.draw(timeTex, timeX, timeY, timeW, timeH);
-        batch.draw(timeOverlayTex, overlayX, overlayY, overlayW, overlayH);   // time.png đè lên time_bar
+        batch.draw(timeOverlayTex, overlayX, overlayY, overlayW, overlayH);
 
-        // Khung energy ở góc dưới
         drawEnergyFrame(batch, p1EIconX, p1EBarX, false);
         if (avatar2 != null) drawEnergyFrame(batch, p2EIconX, p2EBarX, true);
 
@@ -195,6 +213,8 @@ public class HUD {
         timeOverlayTex.dispose();
         energyIconTex.dispose();
         energyBarTex.dispose();
+        whitePx.dispose();
+        font.dispose();
         avatar1.dispose();
         if (avatar2 != null) avatar2.dispose();
     }
@@ -206,8 +226,8 @@ public class HUD {
         float hw = hpTex.getWidth() * HP_STRETCH_X, hh = hpTex.getHeight();
         float tw = timeTex.getWidth(), th = timeTex.getHeight();
 
-        float totalW = 2f * (fw + hw) + tw;           // bề rộng cả hàng ở scale 1
-        float maxH = Math.max(fh, Math.max(hh, th));  // bề cao hàng ở scale 1
+        float totalW = 2f * (fw + hw) + tw;
+        float maxH = Math.max(fh, Math.max(hh, th));
 
         float scale = Math.min(
             (screenW - 2f * MARGIN_X) / totalW,
@@ -224,11 +244,10 @@ public class HUD {
 
         float rowH = maxH * scale;
         float rowY = screenH - MARGIN_TOP - rowH;
-        frameY = rowY + (rowH - frameH) / 2f + FRAME_OFFSET_Y * scale;   // mỗi phần căn giữa theo chiều dọc
+        frameY = rowY + (rowH - frameH) / 2f + FRAME_OFFSET_Y * scale;
         hpY = rowY + (rowH - hpH) / 2f + HP_OFFSET_Y * scale;
         timeY = rowY + (rowH - timeH) / 2f + TIME_OFFSET_Y * scale;
 
-        // Vị trí gốc: các phần dính liền nhau, căn giữa cả hàng
         float left = (screenW - totalW * scale) / 2f;
         float baseP1Frame = left;
         float baseP1Bar = baseP1Frame + frameW;
@@ -236,18 +255,16 @@ public class HUD {
         float baseP2Bar = baseTime + timeW;
         float baseP2Frame = baseP2Bar + hpW;
 
-        // Cộng offset riêng cho từng phần (P2 đảo chiều X vì là bản lật)
         p1FrameX = baseP1Frame + FRAME_OFFSET_X * scale;
         p2FrameX = baseP2Frame - FRAME_OFFSET_X * scale;
         p1BarX = baseP1Bar + HP_OFFSET_X * scale;
         p2BarX = baseP2Bar - HP_OFFSET_X * scale;
         timeX = baseTime + TIME_OFFSET_X * scale;
 
-        // time.png nằm chính giữa time_bar (đã tính offset của time_bar) rồi cộng offset riêng
         overlayX = timeX + (timeW - overlayW) / 2f + TIME_OVERLAY_OFFSET_X * scale;
         overlayY = timeY + (timeH - overlayH) / 2f + TIME_OVERLAY_OFFSET_Y * scale;
 
-        // ---- Energy: góc dưới, P1 bên trái, P2 bên phải (lật) ----
+        // Energy
         eIconW = energyIconTex.getWidth() * scale;  eIconH = energyIconTex.getHeight() * scale;
         eBarW = energyBarTex.getWidth() * scale;    eBarH = energyBarTex.getHeight() * scale;
         float eRowH = Math.max(eIconH, eBarH);
@@ -256,43 +273,52 @@ public class HUD {
 
         p1EIconX = ENERGY_MARGIN;                      p1EBarX = p1EIconX + eIconW;
         p2EIconX = screenW - ENERGY_MARGIN - eIconW;   p2EBarX = p2EIconX - eBarW;
+
+        // Cỡ chữ số máu theo chiều cao thanh máu
+        font.getData().setScale(1f);
+        font.getData().setScale(hpH * HP_TEXT_RATIO / font.getCapHeight());
     }
 
     // ===================== VẼ =====================
 
     /**
-     * Vẽ 1 bên: avatar -> khung đè lên -> thanh máu.
-     * mirror = true cho P2 (khung và thanh máu bị lật ngang).
-     * Máu mất đi từ mép NGOÀI vào, mép trong (sát time_bar) cố định.
+     * Vẽ 1 bên: avatar -> rect đỏ -> rect xanh -> hp_bar.png -> khung avatar -> số máu.
+     * mirror = true cho P2. Máu mất từ mép NGOÀI vào, mép trong (sát time_bar) cố định.
+     * Rect to bằng hp_bar.png và nằm đúng chỗ hp_bar.png.
      */
     private void drawSide(SpriteBatch batch, Texture avatar, float frameX, float barX,
-                          boolean mirror, float ratio) {
-        // Avatar rồi khung đè lên (avatar đã bị đục theo hình khung nên không lòi ra ngoài)
+                          boolean mirror, float hp, float trail, float maxHp) {
+        // Avatar
+        batch.setColor(Color.WHITE);
         batch.draw(avatar, frameX, frameY, frameW, frameH);
+
+        float hpRatio = MathUtils.clamp(hp / maxHp, 0f, 1f);
+        float trailRatio = MathUtils.clamp(trail / maxHp, 0f, 1f);
+
+        // Rect đỏ: tới mức máu trễ
+        float trailW = hpW * trailRatio;
+        batch.setColor(HP_TRAIL_COLOR);
+        batch.draw(whitePx, mirror ? barX : barX + hpW - trailW, hpY, trailW, hpH);
+
+        // Rect xanh: tới mức máu thật, đè lên đỏ
+        float curW = hpW * hpRatio;
+        batch.setColor(HP_FILL_COLOR);
+        batch.draw(whitePx, mirror ? barX : barX + hpW - curW, hpY, curW, hpH);
+
+        // hp_bar.png rồi khung avatar đè lên các rect
+        batch.setColor(Color.WHITE);
+        batch.draw(hpTex, barX, hpY, hpW, hpH, 0, 0, hpTex.getWidth(), hpTex.getHeight(), mirror, false);
         batch.draw(frameTex, frameX, frameY, frameW, frameH,
             0, 0, frameTex.getWidth(), frameTex.getHeight(), mirror, false);
 
-        int texW = hpTex.getWidth(), texH = hpTex.getHeight();
-
-        // Nền: cả thanh bằng màu "máu đã mất"
-        batch.setColor(EMPTY_TINT);
-        batch.draw(hpTex, barX, hpY, hpW, hpH, 0, 0, texW, texH, mirror, false);
-
-        // Phần máu còn lại: cắt từ mép trong (bên phải ảnh gốc) ra phía ngoài
-        int visible = Math.round(texW * MathUtils.clamp(ratio, 0f, 1f));
-        if (visible > 0) {
-            float destW = hpW * visible / texW;
-            float destX = mirror ? barX : barX + hpW - destW;
-            batch.setColor(Color.WHITE);
-            batch.draw(hpTex, destX, hpY, destW, hpH, texW - visible, 0, visible, texH, mirror, false);
-        }
+        // Số máu còn lại: P1 sát mép phải thanh (trừ HP_TEXT_PAD), P2 sát mép trái (cộng HP_TEXT_PAD)
+        glyph.setText(font, String.valueOf((int) Math.ceil(hp)));
+        float tx = mirror ? barX + HP_TEXT_PAD : barX + hpW - HP_TEXT_PAD - glyph.width;
+        float ty = hpY + (hpH + glyph.height) / 2f;
+        font.setColor(Color.WHITE);
+        font.draw(batch, glyph, tx, ty);
     }
 
-    /**
-     * Vẽ khung energy 1 bên: ô energy.png rồi energy_bar.png bên cạnh.
-     * mirror = true cho P2 (cả hai ảnh bị lật ngang). Mới là khung, chưa có phần năng lượng chạy.
-     * Nếu energy_bar.png vẽ theo hướng ngược (mép sát icon nằm bên phải ảnh) thì đổi mirror thành !mirror ở dòng vẽ bar.
-     */
     private void drawEnergyFrame(SpriteBatch batch, float iconX, float barX, boolean mirror) {
         batch.setColor(Color.WHITE);
         batch.draw(energyIconTex, iconX, eIconY, eIconW, eIconH,
@@ -303,19 +329,9 @@ public class HUD {
 
     // ===================== AVATAR ĐỤC THEO KHUNG =====================
 
-    /**
-     * Tạo texture avatar to bằng đúng khung, trong suốt ở mọi chỗ NGOÀI hình khung.
-     * Vẽ avatar này trước, khung đè lên sau thì avatar không lòi ra góc vát.
-     *
-     * "Ngoài khung" = vùng trong suốt nối với 4 mép ảnh khung (flood fill), nên ruột kính
-     * bán trong suốt của khung không bị khoét nhầm.
-     *
-     * @param mirror true cho P2: mặt nạ lật ngang để khớp với khung bị lật (avatar không bị lật mặt)
-     */
     private static Texture buildAvatar(FileHandle frameFile, TextureRegion avatar, boolean mirror) {
         Pixmap frame = new Pixmap(frameFile);
 
-        // Lấy pixel của texture chứa avatar (đã nằm trên GPU nên phải đọc lại dữ liệu gốc)
         TextureData td = avatar.getTexture().getTextureData();
         if (!td.isPrepared()) td.prepare();
         Pixmap src = td.consumePixmap();
@@ -324,7 +340,6 @@ public class HUD {
         int rw = avatar.getRegionWidth(), rh = avatar.getRegionHeight();
         int W = frame.getWidth(), H = frame.getHeight();
 
-        // 1) Tìm vùng ngoài khung bằng flood fill từ 4 mép
         boolean[] outside = new boolean[W * H];
         IntArray stack = new IntArray();
         for (int x = 0; x < W; x++) {
@@ -344,7 +359,6 @@ public class HUD {
             if (y < H - 1) pushOutside(frame, outside, stack, x, y + 1, W);
         }
 
-        // 2) Crop avatar cho đúng tỉ lệ khung. Dịch xuống ~6% để lấy rõ mặt hơn
         int cw = rw, ch = rh;
         float aspect = (float) W / H;
         if (aspect > 1f) ch = Math.round(cw / aspect); else cw = Math.round(ch * aspect);
@@ -353,7 +367,6 @@ public class HUD {
         sx = MathUtils.clamp(sx, rx, rx + rw - cw);
         sy = MathUtils.clamp(sy, ry, ry + rh - ch);
 
-        // 3) Thu nhỏ từng bước (chia đôi) cho mịn, rồi mới đưa vào kích thước khung
         Pixmap cur = new Pixmap(cw, ch, Pixmap.Format.RGBA8888);
         cur.drawPixmap(src, 0, 0, sx, sy, cw, ch);
         while (cur.getWidth() >= W * 2 && cur.getHeight() >= H * 2) {
@@ -367,7 +380,6 @@ public class HUD {
         out.setFilter(Pixmap.Filter.BiLinear);
         out.drawPixmap(cur, 0, 0, cur.getWidth(), cur.getHeight(), 0, 0, W, H);
 
-        // 4) Xoá avatar ở vùng ngoài khung
         out.setBlending(Pixmap.Blending.None);
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -385,7 +397,6 @@ public class HUD {
         return tex;
     }
 
-    /** Pixel khung gần như trong suốt (alpha < 40) và chưa đánh dấu thì đánh dấu "ngoài" rồi đẩy vào stack. */
     private static void pushOutside(Pixmap frame, boolean[] outside, IntArray stack, int x, int y, int W) {
         int i = y * W + x;
         if (!outside[i] && (frame.getPixel(x, y) & 0xff) < 40) {

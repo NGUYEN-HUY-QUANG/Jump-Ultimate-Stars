@@ -4,6 +4,7 @@ import com.HUY.JumpUltimateStars.character.CharacterData;
 import com.HUY.JumpUltimateStars.character.CharacterRegistry;
 import com.HUY.JumpUltimateStars.character.Fighter;
 import com.HUY.JumpUltimateStars.character.animation.CharacterAnimationManager;
+import com.HUY.JumpUltimateStars.effect.Effect;
 import com.HUY.JumpUltimateStars.hethong.FightCamera;
 import com.HUY.JumpUltimateStars.hethong.MainGame;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
@@ -17,6 +18,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 
 /**
@@ -32,16 +34,12 @@ import com.badlogic.gdx.utils.ScreenUtils;
  *
  * HUD vẽ theo toạ độ MÀN HÌNH (camera riêng), luôn nằm trên cùng, không bị zoom theo FightCamera.
  *
+ * VA CHẠM: đòn cận chiến / skill do Fighter tự xét hitbox với đối thủ (setOpponent).
+ * Effect (phi tiêu...) thì GameScreen xét mỗi frame bằng applyEffectHits().
+ * Máu lấy từ Fighter.getHp() đẩy lên HUD mỗi frame.
+ *
  * Tài nguyên (batch, shapeRenderer, animManager, map, hud, effect + marker của Fighter) tạo trong show()
  * và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(), không tự dispose.
- *
- * TODO: va chạm. Khi Fighter có hurtbox và máu, thêm vào render():
- *   for (Effect e : fighter1.getEffects()) {
- *       int dmg = e.checkHit(fighter2.getHurtbox());
- *       if (dmg > 0) fighter2.takeDamage(dmg);
- *   }
- *   (và ngược lại fighter2 -> fighter1)
- *   rồi cập nhật HUD: hud.setP1Hp(fighter1.getHp()); hud.setP2Hp(fighter2.getHp());
  */
 public class GameScreen implements Screen {
 
@@ -96,6 +94,10 @@ public class GameScreen implements Screen {
             fighter2.setMap(map);
             fighter2.setGroundY(map.getGroundY());
             fighter2.setMarker(P2_MARKER_PATH);
+
+            // Gắn đối thủ cho nhau để đòn cận chiến biết đánh ai
+            fighter1.setOpponent(fighter2);
+            fighter2.setOpponent(fighter1);
         }
 
         fightCam = new FightCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), worldW, worldH);
@@ -116,12 +118,29 @@ public class GameScreen implements Screen {
         throw new IllegalArgumentException("Không có nhân vật: " + id);
     }
 
+    /** Effect của attacker chạm hurtbox của target thì trừ máu target. */
+    private static void applyEffectHits(Fighter attacker, Fighter target) {
+        Array<Effect> effects = attacker.getEffects();
+        for (int i = 0; i < effects.size; i++) {
+            int dmg = effects.get(i).checkHit(target.getHurtbox());
+            if (dmg > 0) target.takeDamage(dmg, attacker.getCenterX());
+        }
+    }
+
     @Override
     public void render(float delta) {
         // --- Cập nhật (worldW/worldH thay cho kích thước cửa sổ) ---
         fighter1.update(delta, worldW);
         if (fighter2 != null) fighter2.update(delta, worldW);
-        // TODO: check va chạm effect (xem mô tả ở đầu class)
+
+        // Va chạm effect, rồi đẩy máu lên HUD (đòn cận chiến đã được Fighter tự xử lý trong update)
+        if (fighter2 != null) {
+            applyEffectHits(fighter1, fighter2);
+            applyEffectHits(fighter2, fighter1);
+            hud.setP2Hp(fighter2.getHp());
+        }
+        hud.setP1Hp(fighter1.getHp());
+        hud.update(delta);
 
         fightCam.update(delta, fighter1, fighter2);   // SAU khi fighter đã update
 

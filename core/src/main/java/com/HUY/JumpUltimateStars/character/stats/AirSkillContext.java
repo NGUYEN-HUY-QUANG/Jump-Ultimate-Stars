@@ -45,6 +45,9 @@ public class AirSkillContext {
     /** Sát thương cận chiến skill báo ở frame này (Fighter đọc rồi xử lý). Đặt bằng hit(). */
     public int hitDamage;
 
+    /** Đòn cận chiến skill báo ở frame này có knockout không. Đặt bằng hit(damage, knockdown). */
+    public boolean hitKnockdown;
+
     private final Array<Effect> effects;   // danh sách effect của Fighter
 
     public AirSkillContext(Array<Effect> effects) {
@@ -64,6 +67,7 @@ public class AirSkillContext {
         animDone = false;
         flag = false;
         hitDamage = 0;
+        hitKnockdown = false;
     }
 
     /** Độ cao thật trên màn hình (dùng để đặt vị trí effect). */
@@ -77,10 +81,16 @@ public class AirSkillContext {
     }
 
     /**
-     * Báo "hitbox cận chiến đang bật ở frame này". Có thể gọi MỖI FRAME: Fighter tự kiểm tra va chạm
-     * và chỉ tính dame 1 lần mỗi lần dùng skill (trúng rồi thì các lần gọi sau bị bỏ qua).
+     * Báo "hitbox cận chiến đang bật ở frame này", chỉ hit thường. Có thể gọi MỖI FRAME:
+     * Fighter tự kiểm tra va chạm và chỉ tính dame 1 lần mỗi lần dùng skill.
      */
     public void hit(int damage) {
+        hit(damage, false);
+    }
+
+    /** Như hit(damage) nhưng chọn được trúng thì knockout hay chỉ hit. */
+    public void hit(int damage, boolean knockdown) {
         hitDamage = damage;
+        hitKnockdown = knockdown;
     }
 }
