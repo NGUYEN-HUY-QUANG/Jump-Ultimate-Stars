@@ -21,6 +21,9 @@ public interface Effect {
     /** true = trúng thì đối thủ bị knockout, false = chỉ hit. Effect nào knockout thì override. */
     default boolean isKnockdown() { return false; }
 
+    /** Energy hồi cho người bắn khi effect này trúng đối thủ. Effect nào có hồi thì override, mặc định 0. */
+    default float getEnergy() { return 0f; }
+
     /** false khi đã xong hoặc bị hủy. */
     boolean isActive();
 

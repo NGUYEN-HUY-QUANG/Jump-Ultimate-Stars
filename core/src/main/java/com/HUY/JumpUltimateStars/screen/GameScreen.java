@@ -24,19 +24,16 @@ import com.badlogic.gdx.utils.ScreenUtils;
 /**
  * Màn hình trận đấu. Chỉ điều phối: tạo map + 2 Fighter + camera + HUD, mỗi frame update rồi vẽ.
  * Logic nhân vật nằm ở Fighter, logic từng effect nằm trong class effect đó,
- * logic zoom / theo dõi nằm ở FightCamera, phần hiển thị thanh máu / thời gian / avatar nằm ở HUD.
+ * logic zoom / theo dõi nằm ở FightCamera, phần hiển thị thanh máu / energy / thời gian / avatar nằm ở HUD.
  *
  * THẾ GIỚI: kích thước = ảnh map (worldW x worldH). Fighter, đất, platform, effect đều
- * tính theo pixel thế giới. Cửa sổ chỉ là khung nhìn do FightCamera điều khiển, nên đổi
- * kích thước cửa sổ KHÔNG làm nhân vật hay đất bị lệch.
- *
- * Marker P1 / P2 trên đầu nhân vật do Fighter vẽ (toạ độ thế giới, đi theo nhân vật và zoom theo camera).
+ * tính theo pixel thế giới. Cửa sổ chỉ là khung nhìn do FightCamera điều khiển.
  *
  * HUD vẽ theo toạ độ MÀN HÌNH (camera riêng), luôn nằm trên cùng, không bị zoom theo FightCamera.
  *
  * VA CHẠM: đòn cận chiến / skill do Fighter tự xét hitbox với đối thủ (setOpponent).
  * Effect (phi tiêu...) thì GameScreen xét mỗi frame bằng applyEffectHits().
- * Máu lấy từ Fighter.getHp() đẩy lên HUD mỗi frame.
+ * Máu và energy lấy từ Fighter đẩy lên HUD mỗi frame.
  *
  * Tài nguyên (batch, shapeRenderer, animManager, map, hud, effect + marker của Fighter) tạo trong show()
  * và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(), không tự dispose.
@@ -118,12 +115,18 @@ public class GameScreen implements Screen {
         throw new IllegalArgumentException("Không có nhân vật: " + id);
     }
 
-    /** Effect của attacker chạm hurtbox của target thì trừ máu target. */
+    /** Effect của attacker chạm hurtbox của target thì trừ máu target và hồi energy cho attacker. */
     private static void applyEffectHits(Fighter attacker, Fighter target) {
         Array<Effect> effects = attacker.getEffects();
         for (int i = 0; i < effects.size; i++) {
-            int dmg = effects.get(i).checkHit(target.getHurtbox());
-            if (dmg > 0) target.takeDamage(dmg, attacker.getCenterX());
+            if (target.isInvulnerable()) continue;   // đang lướt / knockout / đứng dậy: phi tiêu bay xuyên qua
+
+            Effect e = effects.get(i);
+            int dmg = e.checkHit(target.getHurtbox());
+            if (dmg > 0) {
+                target.takeDamage(dmg, attacker.getCenterX());
+                attacker.addEnergy(e.getEnergy());
+            }
         }
     }
 
@@ -133,13 +136,15 @@ public class GameScreen implements Screen {
         fighter1.update(delta, worldW);
         if (fighter2 != null) fighter2.update(delta, worldW);
 
-        // Va chạm effect, rồi đẩy máu lên HUD (đòn cận chiến đã được Fighter tự xử lý trong update)
+        // Va chạm effect, rồi đẩy máu + energy lên HUD (đòn cận chiến đã được Fighter tự xử lý trong update)
         if (fighter2 != null) {
             applyEffectHits(fighter1, fighter2);
             applyEffectHits(fighter2, fighter1);
             hud.setP2Hp(fighter2.getHp());
+            hud.setP2Energy(fighter2.getEnergy());
         }
         hud.setP1Hp(fighter1.getHp());
+        hud.setP1Energy(fighter1.getEnergy());
         hud.update(delta);
 
         fightCam.update(delta, fighter1, fighter2);   // SAU khi fighter đã update

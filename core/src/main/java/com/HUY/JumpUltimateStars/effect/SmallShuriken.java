@@ -27,6 +27,7 @@ public class SmallShuriken implements Effect {
     private static final int COUNT = 3;                 // số viên
     private static final float SPACING_Y = 40f;         // khoảng cách dọc giữa 2 viên
     private static final int DAMAGE = 20;
+    private static final float ENERGY = 15f;            // energy hồi cho người bắn khi trúng
     private static final boolean KNOCKDOWN = false;     // true = trúng thì knockout, false = chỉ hit
 
     private final Array<Texture> textures = new Array<>();
@@ -106,6 +107,9 @@ public class SmallShuriken implements Effect {
 
     @Override
     public boolean isKnockdown() { return KNOCKDOWN; }
+
+    @Override
+    public float getEnergy() { return ENERGY; }
 
     @Override
     public boolean isActive() { return active; }

@@ -1,5 +1,6 @@
 package com.HUY.JumpUltimateStars.ui;
 
+import com.HUY.JumpUltimateStars.character.stats.CharacterStats;
 import com.HUY.JumpUltimateStars.character.stats.CharacterStatsRegistry;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
@@ -27,14 +28,15 @@ import com.badlogic.gdx.utils.IntArray;
  *   - rect XANH: dài tới máu thật, vẽ đè lên đỏ (phần đỏ lộ ra = máu vừa mất)
  * Số máu còn lại nằm sát mép phải của thanh P1 (trừ HP_TEXT_PAD), P2 đối xứng (mép trái).
  *
- * Góc dưới màn hình: khung energy của mỗi bên (mới vẽ khung, chưa có logic).
+ * Góc dưới màn hình: energy của mỗi bên. Rect màu nằm dưới energy_bar.png, 3 lớp xanh dương -> vàng -> đỏ
+ * chồng lên nhau, đầy cả 3 thì nhấp nháy 3 màu. Ô icon ghi số thanh đã đầy (0..3).
  *
  * Cách dùng trong GameScreen:
  *   show():    hud = new HUD(p1Id, p2Id, p1Avatar, p2Avatar); hud.resize(w, h);
  *   render():  hud.update(delta); ... vẽ SAU CÙNG: hud.render(batch);
  *   resize():  hud.resize(width, height);
  *   dispose(): hud.dispose();
- *   Khi máu đổi: hud.setP1Hp(hp) / hud.setP2Hp(hp)
+ *   Khi máu / energy đổi: hud.setP1Hp(hp) / setP2Hp(hp) / setP1Energy(e) / setP2Energy(e)
  */
 public class HUD {
 
@@ -89,6 +91,17 @@ public class HUD {
     // ===================== ENERGY (góc dưới) =====================
 
     private static final float ENERGY_MARGIN = 12f;
+    /** Rút ngắn rect màu energy so với energy_bar.png (pixel màn hình). */
+    private static final float ENERGY_TRIM = 24f;
+
+    /** Màu thanh 1, 2, 3 (cũng là thứ tự nhấp nháy khi đầy cả 3). */
+    private static final Color[] ENERGY_COLORS = {
+        new Color(0.2f, 0.5f, 1f, 1f),      // xanh dương
+        new Color(1f, 0.85f, 0.1f, 1f),     // vàng
+        new Color(0.9f, 0.15f, 0.15f, 1f)   // đỏ
+    };
+    /** Khi đầy cả 3 thanh: đổi màu mỗi bao nhiêu giây. */
+    private static final float ENERGY_FLASH_INTERVAL = 0.12f;
 
     // ===================== DỮ LIỆU =====================
 
@@ -111,6 +124,9 @@ public class HUD {
     private float hp2;
     private float trail1, trail2;           // máu trễ (đơn vị HP)
     private float trailTimer1, trailTimer2; // đồng hồ chờ trước khi đỏ tụt
+
+    private float energy1, energy2;
+    private float flashTime;                // đồng hồ nhấp nháy energy
 
     private final OrthographicCamera camera = new OrthographicCamera();
 
@@ -169,8 +185,13 @@ public class HUD {
         hp2 = nh;
     }
 
-    /** Gọi mỗi frame (trước render) để rect đỏ tụt dần về máu thật. */
+    /** Đặt energy hiện tại (0 .. ENERGY_PER_BAR * MAX_ENERGY_BARS). */
+    public void setP1Energy(float e) { energy1 = e; }
+    public void setP2Energy(float e) { energy2 = e; }
+
+    /** Gọi mỗi frame (trước render) để rect đỏ tụt dần về máu thật và energy nhấp nháy. */
     public void update(float delta) {
+        flashTime += delta;
         trailTimer1 -= delta;
         if (trailTimer1 <= 0f && trail1 > hp1) {
             trail1 = Math.max(hp1, trail1 - TRAIL_SPEED * maxHp1 * delta);
@@ -199,8 +220,8 @@ public class HUD {
         batch.draw(timeTex, timeX, timeY, timeW, timeH);
         batch.draw(timeOverlayTex, overlayX, overlayY, overlayW, overlayH);
 
-        drawEnergyFrame(batch, p1EIconX, p1EBarX, false);
-        if (avatar2 != null) drawEnergyFrame(batch, p2EIconX, p2EBarX, true);
+        drawEnergy(batch, p1EIconX, p1EBarX, false, energy1);
+        if (avatar2 != null) drawEnergy(batch, p2EIconX, p2EBarX, true, energy2);
 
         batch.setColor(Color.WHITE);
         batch.end();
@@ -274,7 +295,7 @@ public class HUD {
         p1EIconX = ENERGY_MARGIN;                      p1EBarX = p1EIconX + eIconW;
         p2EIconX = screenW - ENERGY_MARGIN - eIconW;   p2EBarX = p2EIconX - eBarW;
 
-        // Cỡ chữ số máu theo chiều cao thanh máu
+        // Cỡ chữ số theo chiều cao thanh máu (dùng chung cho số máu và số energy)
         font.getData().setScale(1f);
         font.getData().setScale(hpH * HP_TEXT_RATIO / font.getCapHeight());
     }
@@ -319,12 +340,43 @@ public class HUD {
         font.draw(batch, glyph, tx, ty);
     }
 
-    private void drawEnergyFrame(SpriteBatch batch, float iconX, float barX, boolean mirror) {
+    /**
+     * Vẽ energy 1 bên: các lớp màu (xanh -> vàng -> đỏ, lớp sau đè lớp trước) -> energy_bar.png
+     * -> icon -> số thanh đã đầy ghi giữa icon. Đầy cả 3 thanh thì cả thanh nhấp nháy 3 màu.
+     * P1 đầy từ trái sang, P2 đầy từ phải sang.
+     */
+    private void drawEnergy(SpriteBatch batch, float iconX, float barX, boolean mirror, float energy) {
+        float per = CharacterStats.ENERGY_PER_BAR;
+        int maxBars = CharacterStats.MAX_ENERGY_BARS;
+        int fullBars = Math.min((int) (energy / per), maxBars);
+
+        if (fullBars >= maxBars) {
+            int idx = (int) (flashTime / ENERGY_FLASH_INTERVAL) % ENERGY_COLORS.length;
+            drawEnergyRect(batch, barX, mirror, 1f, ENERGY_COLORS[idx]);
+        } else {
+            for (int i = 0; i <= fullBars; i++) {
+                float ratio = MathUtils.clamp((energy - i * per) / per, 0f, 1f);
+                if (ratio > 0f) drawEnergyRect(batch, barX, mirror, ratio, ENERGY_COLORS[i]);
+            }
+        }
+
         batch.setColor(Color.WHITE);
-        batch.draw(energyIconTex, iconX, eIconY, eIconW, eIconH,
-            0, 0, energyIconTex.getWidth(), energyIconTex.getHeight(), mirror, false);
         batch.draw(energyBarTex, barX, eBarY, eBarW, eBarH,
             0, 0, energyBarTex.getWidth(), energyBarTex.getHeight(), mirror, false);
+        batch.draw(energyIconTex, iconX, eIconY, eIconW, eIconH,
+            0, 0, energyIconTex.getWidth(), energyIconTex.getHeight(), mirror, false);
+
+        glyph.setText(font, String.valueOf(fullBars));
+        font.setColor(Color.WHITE);
+        font.draw(batch, glyph,
+            iconX + (eIconW - glyph.width) / 2f,
+            eIconY + (eIconH + glyph.height) / 2f);
+    }
+
+    private void drawEnergyRect(SpriteBatch batch, float barX, boolean mirror, float ratio, Color color) {
+        float w = (eBarW - ENERGY_TRIM) * ratio;
+        batch.setColor(color);
+        batch.draw(whitePx, mirror ? barX + eBarW - w : barX, eBarY, w, eBarH);
     }
 
     // ===================== AVATAR ĐỤC THEO KHUNG =====================

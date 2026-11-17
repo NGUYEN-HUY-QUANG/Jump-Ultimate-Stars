@@ -5,17 +5,11 @@ package com.HUY.JumpUltimateStars.character.stats;
  *
  * Đây chỉ là dữ liệu tĩnh, KHÔNG chứa logic. Logic chạy đòn (đếm frame, nối combo,
  * gây dame) nằm ở Fighter. Mỗi nhân vật khai báo mảng Move[] trong class Stats của mình
- * (vd NarutoBaseStats), thứ tự trong mảng chính là thứ tự combo: phần tử đầu là đòn 1,
- * phần tử cuối là đòn kết (sau đó bị khóa input trong khoảng recovery).
- *
- * Các field đều final nên đối tượng này dùng chung an toàn giữa nhiều Fighter cùng nhân vật.
+ * (vd NarutoBaseStats), thứ tự trong mảng chính là thứ tự combo.
  */
 public class Move {
 
-    /**
-     * Tên action, đồng thời là tên thư mục ảnh và tiền tố file ảnh.
-     * Ví dụ "J1" -> characters/{charId}/J1/J1_0.png, J1_1.png, ...
-     */
+    /** Tên action, đồng thời là tên thư mục ảnh và tiền tố file ảnh (vd "J1"). */
     public final String action;
 
     /** Thời gian hiển thị mỗi frame (giây). Thời gian cả đòn = số frame * frameDuration. */
@@ -34,22 +28,17 @@ public class Move {
      */
     public final float recovery;
 
-    /** true = trúng thì đối thủ bị KNOCKOUT (ngã, nằm, đứng dậy); false = chỉ bị HIT (stun). */
+    /** true = trúng thì đối thủ bị KNOCKOUT; false = chỉ bị HIT (stun). */
     public final boolean knockdown;
+
+    /** Energy hồi khi đòn này trúng. Mặc định 0. */
+    public float energy;
 
     /** Đòn chỉ gây hit (không knockout). */
     public Move(String action, float frameDuration, int damage, int hitFrame, float recovery) {
         this(action, frameDuration, damage, hitFrame, recovery, false);
     }
 
-    /**
-     * @param action        tên thư mục + tiền tố ảnh của đòn (vd "J1")
-     * @param frameDuration giây mỗi frame
-     * @param damage        sát thương
-     * @param hitFrame      frame gây dame (đếm từ 0)
-     * @param recovery      thời gian nghỉ sau đòn (giây)
-     * @param knockdown     true = đòn này knockout đối thủ
-     */
     public Move(String action, float frameDuration, int damage, int hitFrame, float recovery,
                 boolean knockdown) {
         this.action = action;
@@ -58,5 +47,11 @@ public class Move {
         this.hitFrame = hitFrame;
         this.recovery = recovery;
         this.knockdown = knockdown;
+    }
+
+    /** Đặt energy hồi khi trúng, dùng nối ngay sau constructor: new Move(...).energy(4f). */
+    public Move energy(float e) {
+        this.energy = e;
+        return this;
     }
 }

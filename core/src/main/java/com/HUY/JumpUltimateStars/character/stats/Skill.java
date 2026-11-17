@@ -4,15 +4,13 @@ import com.HUY.JumpUltimateStars.effect.Effect;
 
 /**
  * Dữ liệu của 1 skill (hiện là phím U). KHÔNG chứa logic: việc chạy skill nằm ở Fighter,
- * số liệu của effect (dame, tốc độ, knockout...) nằm trong class effect.
+ * số liệu của effect (dame, tốc độ, knockout, energy...) nằm trong class effect.
  * Ảnh nhân vật khi tung skill: characters/{charId}/{action}/{action}_{i}.png (vd "U").
  * Mọi chỉ số frame đều đếm từ 0, giống tên file ảnh.
  *
  * 2 kiểu, dùng constructor tương ứng:
  *  - Cận chiến nhiều hit (Goku): nhân vật tự gây dame ở các hitFrames.
- *    Có thể bật knockdownOnLastHit: hit cuối knockout, các hit giữa chỉ là hit thường.
- *  - Gọi effect (Naruto): tới spawnFrame thì sinh effect, effect mới là thứ gây dame
- *    (effect tự quyết knockout qua Effect.isKnockdown()).
+ *  - Gọi effect (Naruto): tới spawnFrame thì sinh effect, effect mới là thứ gây dame.
  */
 public class Skill {
 
@@ -35,6 +33,9 @@ public class Skill {
     // ----- Gọi effect -----
     public final Effect.Factory effect;   // null = skill không có effect
     public final int spawnFrame;          // frame sinh effect
+
+    /** Energy hồi MỖI HIT cận chiến trúng. Mặc định 0. (Skill gọi effect: ghi energy trong class effect.) */
+    public float energy;
 
     /** Skill cận chiến nhiều hit, không knockout. */
     public Skill(String action, float frameDuration, int damage, int[] hitFrames, float cooldown) {
@@ -65,5 +66,11 @@ public class Skill {
         this.knockdownOnLastHit = false;
         this.effect = effect;
         this.spawnFrame = spawnFrame;
+    }
+
+    /** Đặt energy hồi mỗi hit trúng: new Skill(...).energy(3f). */
+    public Skill energy(float e) {
+        this.energy = e;
+        return this;
     }
 }

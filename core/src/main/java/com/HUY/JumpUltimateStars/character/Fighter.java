@@ -78,6 +78,7 @@ public class Fighter {
 
     // Bị đánh trúng (hit thường)
     private static final float HIT_DURATION = 0.6f;          // thời gian stun (giây)
+    private static final float ENERGY_ON_HURT = 5f;   // energy hồi mỗi lần bị nhận dame
     private static final float HIT_FRAME_DURATION = 0.05f;   // chỉ để preload, thời gian thật tính ở takeDamage()
 
     // Knockout
@@ -129,6 +130,7 @@ public class Fighter {
     // ===================== MÁU & VA CHẠM =====================
 
     private int hp;
+    private float energy;   // ENERGY_PER_BAR * MAX_ENERGY_BARS
     private float hitTimer;                     // thời gian stun còn lại
     private Fighter opponent;                   // null nếu SINGLE
     private final Rectangle hurtbox = new Rectangle();    // dùng lại, tránh new mỗi frame
@@ -804,7 +806,7 @@ public class Fighter {
 
     /** Đang knockout / đứng dậy: không nhận dame, không điều khiển được. */
     public boolean isInvulnerable() {
-        return state == State.KNOCKDOWN || state == State.GET_UP;
+        return state == State.KNOCKDOWN || state == State.GET_UP || state == State.DASH;
     }
 
     // ===================== GÂY / NHẬN DAME =====================
@@ -842,27 +844,28 @@ public class Fighter {
      * Hộp đánh hiện tại chạm đối thủ thì trừ máu. Trả true nếu trúng.
      * Đối thủ đang knockout / đứng dậy thì bỏ qua (không trúng, đòn không bị tiêu).
      */
-    private boolean hitOpponent(int damage, boolean knockdown) {
+    private boolean hitOpponent(int damage, boolean knockdown, float energyGain) {
         if (opponent == null || opponent.isInvulnerable()
             || !getAttackBox().overlaps(opponent.getHurtbox())) return false;
         opponent.takeDamage(damage, centerX, knockdown);
+        addEnergy(energyGain);
         return true;
     }
 
     /** Gọi 1 lần khi đòn thường tới frame gây dame. */
     private void doHit(Move m) {
-        hitOpponent(m.damage, m.knockdown);
+        hitOpponent(m.damage, m.knockdown, m.energy);
     }
 
     /** Gọi mỗi khi skill cận chiến tới 1 frame gây dame. Hit cuối knockout nếu skill bật knockdownOnLastHit. */
     private void doSkillHit(Skill s, int hitIndex) {
         boolean ko = s.knockdownOnLastHit && hitIndex == s.hitFrames.length - 1;
-        hitOpponent(s.damage, ko);
+        hitOpponent(s.damage, ko, s.energy);
     }
 
     /** Skill U trên không: trúng thì trả true (không gọi lại nữa), chưa trúng thì frame sau thử lại. */
     private boolean doAirSkillHit(int damage, boolean knockdown) {
-        return hitOpponent(damage, knockdown);
+        return hitOpponent(damage, knockdown, airSkill.energy);
     }
 
     /** Nhận dame, chỉ hit thường (giữ cho code cũ). */
@@ -882,6 +885,7 @@ public class Fighter {
         if (isInvulnerable()) return;
 
         hp = Math.max(0, hp - calcIncomingDamage(rawDamage));
+        addEnergy(ENERGY_ON_HURT);   // bị dính đòn (kể cả đang thủ) đều hồi energy
 
         if (state == State.DEFEND) {
             if (sourceX < centerX) facingLeft = true;
@@ -917,6 +921,16 @@ public class Fighter {
 
     public int getHp() {
         return hp;
+    }
+
+    /** Cộng energy (tự kẹp 0..max). Số âm = trừ (dùng cho ultimate sau này). */
+    public void addEnergy(float amount) {
+        float max = CharacterStats.ENERGY_PER_BAR * CharacterStats.MAX_ENERGY_BARS;
+        energy = MathUtils.clamp(energy + amount, 0f, max);
+    }
+
+    public float getEnergy() {
+        return energy;
     }
 
     // ===================== API CHO GAMESCREEN =====================

@@ -10,6 +10,14 @@ package com.HUY.JumpUltimateStars.character.stats;
  */
 public abstract class CharacterStats {
 
+    // ===================== ENERGY =====================
+
+    /** Energy của 1 thanh. */
+    public static final float ENERGY_PER_BAR = 100f;
+
+    /** Số thanh tích trữ tối đa. */
+    public static final int MAX_ENERGY_BARS = 3;
+
     // ===================== DI CHUYỂN =====================
 
     /** Tốc độ đi ngang (pixel / giây), dùng cho cả đi dưới đất lẫn trên không. */
@@ -67,16 +75,14 @@ public abstract class CharacterStats {
     /**
      * Đòn đánh trên không (bấm J khi đang AIR), mỗi lượt nhảy chỉ đánh được 1 lần.
      * Ví dụ new Move("J_AIR", 0.06f, 40, 1, 0f) -> characters/{charId}/J_AIR/J_AIR_0.png, ...
-     * Trường recovery không dùng. null = nhân vật không có đòn trên không (bấm J trên không không có tác dụng).
+     * Trường recovery không dùng. null = nhân vật không có đòn trên không.
      */
     public Move airMove = null;
 
     /**
      * Skill U khi bấm trên không, mỗi lượt nhảy chỉ dùng được 1 lần.
-     * Gán 1 loại skill cụ thể trong Stats của nhân vật, ví dụ:
-     *   airSkillU = new DiveAirSkill("U_AIR", 0.06f, 0.3f, 10, 60f, 1500f);
-     * null = nhân vật không có skill U trên không (bấm U trên không không có tác dụng).
-     * Dùng chung cooldown với skillU dưới đất.
+     * Ví dụ: airSkillU = new DiveAirSkill("U_AIR", 0.06f, 0.3f, 10, 60f, 1500f);
+     * null = nhân vật không có skill U trên không. Dùng chung cooldown với skillU dưới đất.
      */
     public AirSkill airSkillU = null;
 

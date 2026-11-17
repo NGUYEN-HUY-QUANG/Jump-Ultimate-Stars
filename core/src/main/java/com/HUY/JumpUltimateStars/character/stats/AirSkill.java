@@ -4,11 +4,10 @@ package com.HUY.JumpUltimateStars.character.stats;
  * Skill U khi bấm trên không. Mỗi LOẠI skill là 1 class con kế thừa class này
  * (vd DiveAirSkill = lao chéo xuống, sau này TeleportAirSkill, ShootAirSkill...).
  * Nhân vật nào dùng loại nào thì khai báo trong class Stats của mình:
- *     airSkillU = new DiveAirSkill("U_AIR", 0.06f, 0.3f, 10, 60f, 1500f);
+ *     airSkillU = new DiveAirSkill("U_AIR", 0.06f, 0.3f, 10, 60f, 1500f).energy(10f);
  *
  * Class này là dữ liệu + cách di chuyển, KHÔNG giữ trạng thái của lần dùng (vì 1 instance
- * dùng chung cho nhiều Fighter). Mọi thứ thay đổi trong lúc dùng (vị trí, vận tốc, đã bắn chưa...)
- * nằm ở AirSkillContext do Fighter truyền vào.
+ * dùng chung cho nhiều Fighter). Mọi thứ thay đổi trong lúc dùng nằm ở AirSkillContext.
  *
  * Fighter lo phần chung: chạy animation, chỉ cho dùng 1 lần mỗi lượt nhảy, cooldown,
  * xong thì chuyển sang LAND (nếu đang ở đất) hoặc AIR (nếu còn ở trên không).
@@ -27,10 +26,19 @@ public abstract class AirSkill {
     /** Thời gian chờ dùng lại skill U (giây), đếm từ lúc skill kết thúc. Dùng chung với skill U dưới đất. */
     public final float cooldown;
 
+    /** Energy hồi khi skill trúng (tính 1 lần mỗi lần dùng). Mặc định 0. */
+    public float energy;
+
     protected AirSkill(String action, float frameDuration, float cooldown) {
         this.action = action;
         this.frameDuration = frameDuration;
         this.cooldown = cooldown;
+    }
+
+    /** Đặt energy hồi khi trúng: new DiveAirSkill(...).energy(10f). */
+    public AirSkill energy(float e) {
+        this.energy = e;
+        return this;
     }
 
     /** Gọi 1 lần lúc bắt đầu skill. Dùng để đặt vận tốc ban đầu... (mặc định không làm gì). */
