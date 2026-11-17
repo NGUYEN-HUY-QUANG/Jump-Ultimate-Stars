@@ -7,6 +7,7 @@ import com.HUY.JumpUltimateStars.character.stats.CharacterStats;
 import com.HUY.JumpUltimateStars.character.stats.CharacterStatsRegistry;
 import com.HUY.JumpUltimateStars.character.stats.Move;
 import com.HUY.JumpUltimateStars.character.stats.Skill;
+import com.HUY.JumpUltimateStars.character.stats.Ultimate;
 import com.HUY.JumpUltimateStars.effect.Effect;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
 import com.HUY.JumpUltimateStars.map.MapData;
@@ -25,8 +26,8 @@ import com.badlogic.gdx.utils.Array;
  * Ghép các thành phần:
  *  - Character:        animation + vẽ sprite
  *  - PlayerController: đọc phím
- *  - CharacterStats:   chỉ số cố định (tốc độ, nhảy, lướt, đòn đánh, skill, dame khi thủ)
- *  - Effect:           Fighter tự giữ danh sách effect do mình sinh ra (phi tiêu...).
+ *  - CharacterStats:   chỉ số cố định (tốc độ, nhảy, lướt, đòn đánh, skill, ultimate, dame khi thủ)
+ *  - Effect:           Fighter tự giữ danh sách effect do mình sinh ra (phi tiêu, kame...).
  *                      Effect tự bay, tự vẽ, tự tính dame; Fighter chỉ gọi ra đúng frame
  *                      và cập nhật/vẽ chúng.
  *  - MapData:          để biết platform (vùng đứng thêm ngoài mặt đất chính)
@@ -46,6 +47,7 @@ import com.badlogic.gdx.utils.Array;
  *                     └────── bấm J (nối đòn) ────┘  (chỉ khi chưa phải đòn cuối)
  *
  *   FREE / RECOVERY / LAND / ATTACK(sau frame gây dame + vài frame) ──bấm U──> SKILL ──hết──> FREE
+ *   FREE / RECOVERY / LAND ──bấm I (đủ 1 thanh energy)──> ULTIMATE ──hết (hoặc hụt)──> FREE
  *   FREE / RECOVERY / LAND ──bấm K──> AIR ──chạm đất──> LAND ──hết──> FREE
  *   FREE / RECOVERY / LAND / AIR ──bấm L──> DASH ──hết──> FREE (hoặc AIR nếu lướt trên không)
  *   FREE / RECOVERY / LAND ──GIỮ S──> DEFEND ──thả S──> FREE
@@ -57,6 +59,7 @@ import com.badlogic.gdx.utils.Array;
  *
  *   BẤT KỲ state nào (trừ DEFEND, KNOCKDOWN, GET_UP) ──bị đòn hit──> HIT ──hết HIT_DURATION──> FREE
  *        (hoặc AIR nếu đang trên không). Trên không thì HIT đứng yên giữa trời, hết HIT mới rơi.
+ *        Đang ULTIMATE mà bị đánh thì chiêu bị hủy.
  *   BẤT KỲ state nào (trừ DEFEND, KNOCKDOWN, GET_UP) ──bị đòn knockout──> KNOCKDOWN
  *        Đang trên không: rơi xuống (vẫn animation knockout). Chạm đất rồi nằm KNOCKDOWN_LIE_TIME giây
  *        ──> GET_UP ──hết animation──> FREE
@@ -78,7 +81,7 @@ public class Fighter {
 
     // Bị đánh trúng (hit thường)
     private static final float HIT_DURATION = 0.6f;          // thời gian stun (giây)
-    private static final float ENERGY_ON_HURT = 5f;   // energy hồi mỗi lần bị nhận dame
+    private static final float ENERGY_ON_HURT = 2f;   // energy hồi mỗi lần bị nhận dame
     private static final float HIT_FRAME_DURATION = 0.05f;   // chỉ để preload, thời gian thật tính ở takeDamage()
 
     // Knockout
@@ -108,8 +111,9 @@ public class Fighter {
     // HIT: bị đánh trúng (stun, đứng yên trong HIT_DURATION giây, trên không cũng đứng yên)
     // KNOCKDOWN: bị knockout (trên không thì rơi xuống, chạm đất rồi nằm), không nhận dame
     // GET_UP: đứng dậy sau knockout, không nhận dame
+    // ULTIMATE: tung ultimate (khóa cứng, class Ultimate tự điều khiển frame / di chuyển / dame)
     private enum State { FREE, ATTACK, RECOVERY, AIR, LAND, DASH, SKILL, DEFEND, AIR_ATTACK, AIR_SKILL, HIT,
-        KNOCKDOWN, GET_UP }
+        KNOCKDOWN, GET_UP, ULTIMATE }
 
     // ===================== THÀNH PHẦN =====================
 
@@ -166,6 +170,12 @@ public class Fighter {
     private int skillNextHit;       // hit cận chiến kế tiếp chưa gây dame
     private boolean skillSpawned;   // đã gọi effect chưa
     private float skillCooldown;
+
+    // ===================== ULTIMATE =====================
+
+    private Ultimate ult;
+    private final Ultimate.Context ultCtx = new Ultimate.Context();
+    private boolean ultReady;       // vừa bấm I và đủ 1 thanh energy (tính ở đầu update)
 
     // ===================== NHẢY / LƯỚT =====================
 
@@ -256,6 +266,10 @@ public class Fighter {
         if (stats.skillU != null) {
             animManager.get(charId, stats.skillU.action, stats.skillU.frameDuration, Animation.PlayMode.NORMAL);
         }
+        if (stats.ultimate != null) {
+            Ultimate u = stats.ultimate.create();
+            animManager.get(charId, u.action, u.frameDuration, Animation.PlayMode.NORMAL);
+        }
 
         // Ô neo = bề rộng frame idle. Mọi frame khác vẽ từ mép trái ô này nên thân không bị lệch
         character.setRefWidth(character.getCurrentFrameWidth());
@@ -282,12 +296,15 @@ public class Fighter {
         boolean skillU = skillKey && stats.skillU != null && skillCooldown <= 0f;
         boolean airSkillU = skillKey && stats.airSkillU != null && !airSkillUsed && skillCooldown <= 0f;
         boolean defend = controller.isDefendHeld();   // phím GIỮ, đúng liên tục
+        ultReady = controller.isUltimatePressed() && stats.ultimate != null
+            && energy >= CharacterStats.ENERGY_PER_BAR;
 
         switch (state) {
             case FREE:
-                // Ưu tiên khi bấm cùng lúc: lướt > nhảy > skill > đánh > thủ > đi
+                // Ưu tiên khi bấm cùng lúc: lướt > nhảy > ultimate > skill > đánh > thủ > đi
                 if (dash) startDash();
                 else if (jump) startJump();
+                else if (ultReady) startUltimate();
                 else if (skillU) startSkill(stats.skillU);
                 else if (atk && moves.length > 0) startAttack(0);
                 else if (defend) startDefend();
@@ -305,6 +322,7 @@ public class Fighter {
             case HIT:      updateHit(delta); break;
             case KNOCKDOWN: updateKnockdown(delta); break;
             case GET_UP:   updateGetUp(delta); break;
+            case ULTIMATE: updateUltimate(delta); break;
         }
 
         updateEffects(delta);
@@ -420,7 +438,7 @@ public class Fighter {
         }
     }
 
-    /** Nghỉ sau đòn. Lướt / nhảy / skill hủy ngay; bấm J nối đòn nếu chưa phải đòn cuối; giữ S thì thủ. */
+    /** Nghỉ sau đòn. Lướt / nhảy / ultimate / skill hủy ngay; bấm J nối đòn nếu chưa phải đòn cuối; giữ S thì thủ. */
     private void updateRecovery(float delta, boolean atk, boolean jump, boolean dash,
                                 boolean skillU, boolean defend) {
         boolean isLast = comboIndex == moves.length - 1;
@@ -428,6 +446,7 @@ public class Fighter {
 
         if (dash)   { comboIndex = 0; startDash(); return; }
         if (jump)   { comboIndex = 0; startJump(); return; }
+        if (ultReady) { comboIndex = 0; startUltimate(); return; }
         if (skillU) { comboIndex = 0; startSkill(stats.skillU); return; }
         if (atk && !isLast) { startAttack(comboIndex + 1); return; }
         if (defend) { comboIndex = 0; startDefend(); return; }
@@ -479,6 +498,36 @@ public class Fighter {
             comboIndex = 0;
             state = State.FREE;
         }
+    }
+
+    // ===================== ULTIMATE =====================
+
+    private void startUltimate() {
+        addEnergy(-CharacterStats.ENERGY_PER_BAR);   // HUD tự cập nhật vì đọc getEnergy() mỗi frame
+        comboIndex = 0;
+        ult = stats.ultimate.create();
+        ultCtx.effects = effects;
+        ultCtx.frameCount = animManager.get(charId, ult.action, ult.frameDuration).getKeyFrames().length;
+        state = State.ULTIMATE;
+        updateUltimate(0f);   // hiện ngay frame đầu, khỏi bị 1 frame idle
+    }
+
+    /** Đưa dữ liệu cho chiêu, chiêu trả frame + dame, Fighter hiện frame và gây dame. */
+    private void updateUltimate(float delta) {
+        ultCtx.x = centerX;
+        ultCtx.feetY = groundY + airY;
+        ultCtx.dir = facingLeft ? -1 : 1;
+        ultCtx.touching = opponent != null && !opponent.isInvulnerable()
+            && getAttackBox().overlaps(opponent.getHurtbox());
+        ultCtx.damage = 0;
+        ultCtx.knockdown = false;
+
+        boolean finished = ult.update(ultCtx, delta);
+
+        centerX = ultCtx.x;
+        character.showFrame(ult.action, ult.frameDuration, ultCtx.frame);
+        if (ultCtx.damage > 0) hitOpponent(ultCtx.damage, ultCtx.knockdown, 0f);
+        if (finished) state = State.FREE;
     }
 
     // ===================== THỦ =====================
@@ -580,11 +629,12 @@ public class Fighter {
         character.playFromStart("land", LAND_FRAME_DURATION);
     }
 
-    /** Chạm đất không khóa: lướt / nhảy / skill / đánh / thủ / đi đều hủy được ngay. */
+    /** Chạm đất không khóa: lướt / nhảy / ultimate / skill / đánh / thủ / đi đều hủy được ngay. */
     private void updateLand(float delta, boolean atk, boolean jump, boolean dash,
                             boolean skillU, boolean defend) {
         if (dash) { startDash(); return; }
         if (jump) { startJump(); return; }
+        if (ultReady) { startUltimate(); return; }
         if (skillU) { startSkill(stats.skillU); return; }
         if (atk && moves.length > 0) { startAttack(0); return; }
         if (defend) { startDefend(); return; }
@@ -880,9 +930,11 @@ public class Fighter {
      * phía đó (vẫn thủ).
      * Không thủ + knockdown: vào KNOCKDOWN (trên không thì rơi xuống).
      * Không thủ + hit thường: vào HIT, đứng yên (kể cả trên không) trong HIT_DURATION giây.
+     * Đang ULTIMATE mà bị đánh thì chiêu bị hủy (Goku: kame cũng biến mất).
      */
     public void takeDamage(int rawDamage, float sourceX, boolean knockdown) {
         if (isInvulnerable()) return;
+        if (state == State.ULTIMATE) ult.cancel();
 
         hp = Math.max(0, hp - calcIncomingDamage(rawDamage));
         addEnergy(ENERGY_ON_HURT);   // bị dính đòn (kể cả đang thủ) đều hồi energy
@@ -923,7 +975,7 @@ public class Fighter {
         return hp;
     }
 
-    /** Cộng energy (tự kẹp 0..max). Số âm = trừ (dùng cho ultimate sau này). */
+    /** Cộng energy (tự kẹp 0..max). Số âm = trừ (dùng cho ultimate). */
     public void addEnergy(float amount) {
         float max = CharacterStats.ENERGY_PER_BAR * CharacterStats.MAX_ENERGY_BARS;
         energy = MathUtils.clamp(energy + amount, 0f, max);

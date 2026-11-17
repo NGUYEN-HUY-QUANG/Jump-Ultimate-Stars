@@ -88,4 +88,7 @@ public abstract class CharacterStats {
 
     /** Skill gắn với phím U. null = nhân vật chưa có skill U (bấm U không có tác dụng). */
     public Skill skillU = null;
+
+    /** Ultimate (phím I), tốn 1 thanh energy. null = không có. Mỗi lần dùng tạo instance mới. */
+    public Ultimate.Factory ultimate = null;
 }

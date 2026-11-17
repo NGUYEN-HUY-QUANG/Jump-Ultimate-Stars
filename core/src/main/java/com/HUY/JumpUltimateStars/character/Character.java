@@ -42,6 +42,9 @@ public class Character {
     // dùng để tính frame nào đang được hiển thị (Animation#getKeyFrame)
     private float stateTime = 0f;
 
+    // true = đang ép hiện 1 frame cố định (ultimate tự điều khiển), stateTime không tự chạy
+    private boolean frameLocked;
+
     // Vị trí góc dưới-trái dùng ở CHẾ ĐỘ PREVIEW (đặt bằng setPosition).
     // y còn được dùng chung ở chế độ trận đấu (đặt bằng setCenter).
     private float x, y;
@@ -82,6 +85,8 @@ public class Character {
         // Đang chạy đúng action này rồi thì bỏ qua, không reset stateTime
         if (action.equals(currentAction)) return;
 
+        frameLocked = false;
+
         // Lấy animation từ cache (hoặc load mới nếu chưa có) thông qua manager
         currentAnim = animManager.get(charId, action, frameDuration);
         currentAction = action;
@@ -96,14 +101,23 @@ public class Character {
      * sẽ bị bỏ qua và animation kẹt ở frame cuối.
      */
     public void playFromStart(String action, float frameDuration) {
+        frameLocked = false;
         currentAnim = animManager.get(charId, action, frameDuration);
         currentAction = action;
         stateTime = 0f;
     }
 
+    /** Hiện đúng frame thứ 'frame' của action (ultimate tự điều khiển frame). */
+    public void showFrame(String action, float frameDuration, int frame) {
+        currentAnim = animManager.get(charId, action, frameDuration);
+        currentAction = action;
+        stateTime = (frame + 0.5f) * frameDuration;   // +0.5 để không bị lệch sang frame bên cạnh do sai số
+        frameLocked = true;
+    }
+
     /** Cập nhật thời gian chạy animation, gọi mỗi frame trong vòng lặp game (vd render()). */
     public void update(float delta) {
-        stateTime += delta;
+        if (!frameLocked) stateTime += delta;
     }
 
     public boolean isAnimationFinished() {

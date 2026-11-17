@@ -21,5 +21,7 @@ public class NarutoBaseStats extends CharacterStats {
 
         //                  tên   giây/frame  cooldown  spawnFrame  tạo effect (energy ghi trong SmallShuriken)
         skillU = new Skill("U", 0.07f, 0.3f, 2, (x, y, dir) -> new SmallShuriken(x, y, dir));
+
+        ultimate = NarutoUltimate::new;
     }
 }

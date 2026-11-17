@@ -31,8 +31,8 @@ import com.badlogic.gdx.utils.ScreenUtils;
  *
  * HUD vẽ theo toạ độ MÀN HÌNH (camera riêng), luôn nằm trên cùng, không bị zoom theo FightCamera.
  *
- * VA CHẠM: đòn cận chiến / skill do Fighter tự xét hitbox với đối thủ (setOpponent).
- * Effect (phi tiêu...) thì GameScreen xét mỗi frame bằng applyEffectHits().
+ * VA CHẠM: đòn cận chiến / skill / ultimate do Fighter tự xét hitbox với đối thủ (setOpponent).
+ * Effect (phi tiêu, kame...) thì GameScreen xét mỗi frame bằng applyEffectHits().
  * Máu và energy lấy từ Fighter đẩy lên HUD mỗi frame.
  *
  * Tài nguyên (batch, shapeRenderer, animManager, map, hud, effect + marker của Fighter) tạo trong show()
@@ -115,16 +115,16 @@ public class GameScreen implements Screen {
         throw new IllegalArgumentException("Không có nhân vật: " + id);
     }
 
-    /** Effect của attacker chạm hurtbox của target thì trừ máu target và hồi energy cho attacker. */
+    /** Effect của attacker chạm hurtbox của target thì trừ máu target (có thể knockdown) và hồi energy cho attacker. */
     private static void applyEffectHits(Fighter attacker, Fighter target) {
         Array<Effect> effects = attacker.getEffects();
         for (int i = 0; i < effects.size; i++) {
-            if (target.isInvulnerable()) continue;   // đang lướt / knockout / đứng dậy: phi tiêu bay xuyên qua
+            if (target.isInvulnerable()) continue;   // đang lướt / knockout / đứng dậy: effect bay xuyên qua
 
             Effect e = effects.get(i);
             int dmg = e.checkHit(target.getHurtbox());
             if (dmg > 0) {
-                target.takeDamage(dmg, attacker.getCenterX());
+                target.takeDamage(dmg, attacker.getCenterX(), e.isKnockdown());
                 attacker.addEnergy(e.getEnergy());
             }
         }

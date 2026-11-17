@@ -20,5 +20,7 @@ public class GokuBaseStats extends CharacterStats {
 
         //                  tên  giây/frame  dame/hit  các frame gây dame  cooldown  knockout
         skillU = new Skill("U", 0.07f, 15, new int[]{3, 4, 5, 6, 7}, 0.3f, false).energy(4f);   // 3 mỗi hit
+
+        ultimate = GokuUltimate::new;
     }
 }
