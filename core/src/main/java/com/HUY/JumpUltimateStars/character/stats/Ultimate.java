@@ -18,6 +18,7 @@ public abstract class Ultimate {
         public float feetY;
         public int dir;               // -1 trái, 1 phải
         public boolean touching;      // sprite hiện tại đang chạm đối thủ (đối thủ chưa bị miễn dame)
+        public boolean dark;          // map đang tối (chiêu có thể dùng để đứng yên chờ)
         public int frameCount;        // tổng số ảnh của chiêu
         public Array<Effect> effects; // để chiêu gọi effect ra
         // ---- Chiêu ghi ra ----
@@ -28,6 +29,9 @@ public abstract class Ultimate {
 
     public final String action;
     public final float frameDuration;
+
+    /** Giây map tối khi tung chiêu (0 = không tối). Class con gán trong constructor. */
+    public float darkTime = 0f;
 
     protected Ultimate(String action, float frameDuration) {
         this.action = action;

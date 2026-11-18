@@ -160,6 +160,7 @@ public class Fighter {
     private float recoveryTimer;
     private boolean buffered;       // đã bấm J lúc đang đánh -> nối đòn kế
     private boolean skillBuffered;  // đã bấm U lúc đang đánh -> ra skill khi tới frame hủy
+    private boolean ultBuffered;   // đã bấm I lúc đang đánh -> ra ultimate khi tới frame hủy
     private boolean hitDone;
 
     // ===================== SKILL =====================
@@ -399,6 +400,7 @@ public class Fighter {
         stateTime = 0f;
         buffered = false;
         skillBuffered = false;
+        ultBuffered = false;
         hitDone = false;
         state = State.ATTACK;
         character.playFromStart(move.action, move.frameDuration);
@@ -411,6 +413,7 @@ public class Fighter {
     private void updateAttack(float delta, boolean atk, boolean skillU) {
         if (atk) buffered = true;
         if (skillU) skillBuffered = true;
+        if (ultReady) ultBuffered = true;   // <-- thêm
         stateTime += delta;
 
         int frame = Math.min((int) (stateTime / move.frameDuration), frameCount - 1);
@@ -421,6 +424,15 @@ public class Fighter {
         }
 
         int cancelFrame = Math.min(move.hitFrame + SKILL_CANCEL_DELAY_FRAMES, frameCount - 1);
+
+        // Ultimate ngắt đòn thường (ưu tiên hơn skill U), vẫn phải đủ energy lúc ra chiêu
+        if (ultBuffered && frame >= cancelFrame
+            && stats.ultimate != null && energy >= CharacterStats.ENERGY_PER_BAR) {
+            comboIndex = 0;
+            startUltimate();
+            return;
+        }
+
         if (skillBuffered && frame >= cancelFrame) {
             comboIndex = 0;
             startSkill(stats.skillU);
@@ -508,6 +520,7 @@ public class Fighter {
         ult = stats.ultimate.create();
         ultCtx.effects = effects;
         ultCtx.frameCount = animManager.get(charId, ult.action, ult.frameDuration).getKeyFrames().length;
+        ultCtx.dark = false;
         state = State.ULTIMATE;
         updateUltimate(0f);   // hiện ngay frame đầu, khỏi bị 1 frame idle
     }
@@ -552,6 +565,21 @@ public class Fighter {
     /** Đang thủ hay không (để GameScreen / logic dame hỏi). */
     public boolean isDefending() {
         return state == State.DEFEND;
+    }
+
+    /** Đang tung ultimate hay không (GameScreen dùng để bật hiệu ứng tối). */
+    public boolean isUsingUltimate() {
+        return state == State.ULTIMATE;
+    }
+
+    /** Thời gian map tối của chiêu đang tung (0 nếu không có). */
+    public float getUltimateDarkTime() {
+        return ult != null ? ult.darkTime : 0f;
+    }
+
+    /** GameScreen báo map đang tối hay không, chiêu đọc qua Context.dark. */
+    public void setUltimateDark(boolean dark) {
+        ultCtx.dark = dark;
     }
 
     /**

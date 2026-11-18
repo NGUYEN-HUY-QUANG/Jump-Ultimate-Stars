@@ -5,13 +5,14 @@ import com.HUY.JumpUltimateStars.character.stats.Ultimate;
 /**
  * Ultimate Naruto: CHARGE (đứng yên) -> RUSH (lao tới, không chạm ai thì mất chiêu)
  * -> HIT (đứng yên gây dame liên tục, đòn cuối knockdown) -> END (hết chiêu, không dame).
+ * Map tối đúng trong lúc CHARGE (vận chiêu), bắt đầu RUSH thì sáng lại.
  * Ảnh: characters/naruto_base/I/I_0.png ... (đếm từ 0)
  */
 public class NarutoUltimate extends Ultimate {
 
     // ===== Chỉnh số ở đây (frame đếm từ 0, gồm cả 2 đầu) =====
-    private static final float FRAME_DURATION = 0.05f;
-    private static final float HIT_FRAME_DURATION = 0.07f;
+    private static final float FRAME_DURATION = 0.08f;
+    private static final float HIT_FRAME_DURATION = 0.09f;
     private static final int CHARGE_FROM = 0,  CHARGE_TO = 13;   // vận chiêu
     private static final int RUSH_FROM   = 14, RUSH_TO   = 16;   // lao tới, hết frame thì giữ frame cuối
     private static final int HIT_FROM    = 17, HIT_TO    = 33;   // gây dame
@@ -20,7 +21,7 @@ public class NarutoUltimate extends Ultimate {
     private static final float RUSH_SPEED = 1000f;      // px/s
     private static final float RUSH_DISTANCE = 600f;    // lao tối đa bao xa mà không trúng thì mất chiêu
     private static final float TICK_INTERVAL = 0.1f;    // giây giữa 2 lần dame
-    private static final int TICK_DAMAGE = 10;             // dame mỗi lần tick
+    private static final int TICK_DAMAGE = 10;          // dame mỗi lần tick
     private static final int LAST_DAMAGE = 40;          // đòn cuối, knockdown
 
     private static final int CHARGE = 0, RUSH = 1, HIT = 2, END = 3;
@@ -30,7 +31,10 @@ public class NarutoUltimate extends Ultimate {
     private float traveled;
     private float tick;
 
-    public NarutoUltimate() { super("I", FRAME_DURATION); }
+    public NarutoUltimate() {
+        super("I", FRAME_DURATION);
+        darkTime = (CHARGE_TO - CHARGE_FROM + 1) * FRAME_DURATION;   // tối đúng lúc vận chiêu
+    }
 
     private void next() { phase++; time = 0f; }
 

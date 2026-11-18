@@ -13,6 +13,7 @@ import com.HUY.JumpUltimateStars.map.MapInfo;
 import com.HUY.JumpUltimateStars.ui.HUD;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -35,6 +36,10 @@ import com.badlogic.gdx.utils.ScreenUtils;
  * Effect (phi tiêu, kame...) thì GameScreen xét mỗi frame bằng applyEffectHits().
  * Máu và energy lấy từ Fighter đẩy lên HUD mỗi frame.
  *
+ * HIỆU ỨNG TỐI KHI ULTIMATE: Fighter vừa bước vào ULTIMATE mà chiêu có darkTime > 0 thì map tối
+ * trong darkTime giây. Trong lúc tối chỉ người tung chiêu được update, đối thủ đứng im hoàn toàn,
+ * va chạm effect tạm tắt. Lớp tối phủ lên map, nhân vật vẽ sau nên vẫn sáng.
+ *
  * Tài nguyên (batch, shapeRenderer, animManager, map, hud, effect + marker của Fighter) tạo trong show()
  * và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(), không tự dispose.
  */
@@ -43,6 +48,10 @@ public class GameScreen implements Screen {
     // Đường dẫn ảnh marker trên đầu nhân vật (chỉnh cho đúng thư mục asset)
     private static final String P1_MARKER_PATH = "HUD/1P.png";
     private static final String P2_MARKER_PATH = "HUD/2P.png";
+
+    // Hiệu ứng tối khi ultimate
+    private static final float DARK_MAX_ALPHA = 0.8f;   // độ tối của map
+    private static final float DARK_FADE_SPEED = 4f;    // tốc độ tối dần / sáng dần (alpha mỗi giây)
 
     private final MainGame game;
     private final CharacterSelectScreen.Mode mode;
@@ -61,6 +70,12 @@ public class GameScreen implements Screen {
 
     // Kích thước thế giới (= ảnh map), lấy sau map.load()
     private float worldW, worldH;
+
+    // Trạng thái hiệu ứng tối
+    private float darkTimer;        // thời gian tối còn lại
+    private Fighter darkCaster;     // người đang tung ultimate
+    private float dimAlpha;         // độ tối đang hiển thị (fade)
+    private boolean ult1Was, ult2Was;   // frame trước đó có đang ultimate không (để bắt lúc vừa bắt đầu)
 
     public GameScreen(MainGame game, CharacterSelectScreen.Mode mode,
                       String p1Id, String p2Id, MapInfo mapInfo) {
@@ -130,16 +145,52 @@ public class GameScreen implements Screen {
         }
     }
 
+    /** Fighter vừa bắt đầu ultimate thì bật tối nếu chiêu có darkTime (đang có người tối rồi thì bỏ qua). */
+    private void startDark(Fighter f) {
+        if (darkTimer > 0f) return;
+        float t = f.getUltimateDarkTime();
+        if (t > 0f) {
+            darkTimer = t;
+            darkCaster = f;
+        }
+    }
+
     @Override
     public void render(float delta) {
-        // --- Cập nhật (worldW/worldH thay cho kích thước cửa sổ) ---
-        fighter1.update(delta, worldW);
-        if (fighter2 != null) fighter2.update(delta, worldW);
+        // --- Hiệu ứng tối khi ultimate ---
+        boolean dark = darkTimer > 0f;
+        if (dark) {
+            darkTimer -= delta;
+            // Người tung chiêu bị ngắt giữa chừng thì hết tối luôn
+            if (darkCaster != null && !darkCaster.isUsingUltimate()) darkTimer = 0f;
+            dark = darkTimer > 0f;
+        }
+        fighter1.setUltimateDark(dark);
+        if (fighter2 != null) fighter2.setUltimateDark(dark);
+        dimAlpha = dark ? Math.min(dimAlpha + DARK_FADE_SPEED * delta, DARK_MAX_ALPHA)
+            : Math.max(dimAlpha - DARK_FADE_SPEED * delta, 0f);
 
-        // Va chạm effect, rồi đẩy máu + energy lên HUD (đòn cận chiến đã được Fighter tự xử lý trong update)
+        // --- Cập nhật: đang tối thì chỉ người tung chiêu chạy, người kia đứng im ---
+        if (!dark || darkCaster == fighter1) fighter1.update(delta, worldW);
+        if (fighter2 != null && (!dark || darkCaster == fighter2)) fighter2.update(delta, worldW);
+
+        // Phát hiện ai vừa bắt đầu ultimate
+        boolean u1 = fighter1.isUsingUltimate();
+        if (u1 && !ult1Was) startDark(fighter1);
+        ult1Was = u1;
         if (fighter2 != null) {
-            applyEffectHits(fighter1, fighter2);
-            applyEffectHits(fighter2, fighter1);
+            boolean u2 = fighter2.isUsingUltimate();
+            if (u2 && !ult2Was) startDark(fighter2);
+            ult2Was = u2;
+        }
+
+        // Va chạm effect (tạm tắt khi đang tối), rồi đẩy máu + energy lên HUD
+        // (đòn cận chiến đã được Fighter tự xử lý trong update)
+        if (fighter2 != null) {
+            if (!dark) {
+                applyEffectHits(fighter1, fighter2);
+                applyEffectHits(fighter2, fighter1);
+            }
             hud.setP2Hp(fighter2.getHp());
             hud.setP2Energy(fighter2.getEnergy());
         }
@@ -172,6 +223,16 @@ public class GameScreen implements Screen {
         shapeRenderer.begin(ShapeType.Filled);
         map.renderPlaceholder(shapeRenderer);
         shapeRenderer.end();
+
+        // Lớp 2.5: phủ tối lên map (nhân vật vẽ sau nên vẫn sáng)
+        if (dimAlpha > 0f) {
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            shapeRenderer.begin(ShapeType.Filled);
+            shapeRenderer.setColor(0f, 0f, 0f, dimAlpha);
+            shapeRenderer.rect(0f, 0f, worldW, worldH);
+            shapeRenderer.end();
+        }
 
         // Lớp 3: nhân vật, marker P1/P2 trên đầu, rồi effect đè lên
         batch.begin();
