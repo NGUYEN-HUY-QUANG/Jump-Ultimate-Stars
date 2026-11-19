@@ -1,6 +1,7 @@
 package com.HUY.JumpUltimateStars.screen;
 
 import com.HUY.JumpUltimateStars.hethong.MainGame;
+import com.HUY.JumpUltimateStars.map.MapData;
 import com.HUY.JumpUltimateStars.map.MapInfo;
 import com.HUY.JumpUltimateStars.map.MapRegistry;
 import com.badlogic.gdx.Gdx;
@@ -13,11 +14,16 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.ScreenUtils;
 
 /**
  * Màn hình chọn map. Giống MainScreen nhưng cuộn NGANG (A/D, J để chọn),
- * mỗi mục là 1 ảnh map thay vì chữ. Chọn xong thì vào GameScreen.
+ * mỗi mục là 1 map thay vì chữ. Chọn xong thì vào GameScreen.
+ *
+ * Ảnh map ở đây không có file ghép sẵn: mỗi map được vẽ chồng 3 lớp bg -> map -> front
+ * cùng 1 khung (ITEM_W x ITEM_H).
  */
 public class MapSelectScreen implements Screen {
 
@@ -35,13 +41,17 @@ public class MapSelectScreen implements Screen {
     private ShapeRenderer shapeRenderer;
     private OrthographicCamera camera;
     private Texture backgroundTexture;
-    private Texture[] mapTextures;
+
+    // mapTextures[i] = {bg, map, front} của map thứ i (bg và front có thể null)
+    private Texture[][] mapTextures;
 
     // Giống MainScreen: target = vị trí logic vô hạn, scroll = vị trí đang hiển thị (lerp)
     private float scrollPosition = 0f;
     private float targetPosition = 0f;
 
     private float centerX, centerY;
+    private final Rectangle mapBounds = new Rectangle();
+    private final Rectangle scissors = new Rectangle();
 
     public MapSelectScreen(MainGame game, CharacterSelectScreen.Mode mode, String p1Id, String p2Id) {
         this.game = game;
@@ -58,14 +68,22 @@ public class MapSelectScreen implements Screen {
         camera.setToOrtho(false, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         backgroundTexture = new Texture("background/map_select_screen.png");
 
-        mapTextures = new Texture[MapRegistry.ALL.size()];
+        mapTextures = new Texture[MapRegistry.ALL.size()][];
         for (int i = 0; i < mapTextures.length; i++) {
-            String path = MapRegistry.ALL.get(i).backgroundPath;
-            if (path != null) mapTextures[i] = new Texture(Gdx.files.internal(path));
+            MapInfo m = MapRegistry.ALL.get(i);
+            mapTextures[i] = new Texture[] {
+                loadOptional(m.bgPath), loadOptional(m.mapPath), loadOptional(m.frontPath)
+            };
         }
 
         centerX = Gdx.graphics.getWidth() / 2f;
         centerY = Gdx.graphics.getHeight() / 2f;
+    }
+
+    /** Load texture nếu file tồn tại, không có thì trả null. */
+    private static Texture loadOptional(String path) {
+        if (!Gdx.files.internal(path).exists()) return null;
+        return new Texture(Gdx.files.internal(path));
     }
 
     @Override
@@ -83,20 +101,46 @@ public class MapSelectScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         shapeRenderer.setProjectionMatrix(camera.combined);
 
-        // Lớp 1: nền + ảnh các map
+        // Lớp 1: nền + các map (mỗi map vẽ chồng bg -> map -> front)
         batch.begin();
         batch.draw(backgroundTexture, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         int size = mapTextures.length;
         for (int i = 0; i < size; i++) {
             float d = shortestCircularDistance(i, scrollPosition, size);
-            if (Math.abs(d) > 1.5f || mapTextures[i] == null) continue;
+            if (Math.abs(d) > 1.5f) continue;
 
             float scale = 1f - 0.25f * Math.min(Math.abs(d), 1f);           // càng xa càng nhỏ
             float alpha = MathUtils.clamp(1f - Math.abs(d) * 0.6f, 0f, 1f);  // càng xa càng mờ
             float w = ITEM_W * scale, h = ITEM_H * scale;
 
+            // Hệ số thu nhỏ chung cho cả 3 lớp: vừa khít ảnh map chính vào khung, giữ nguyên tỉ lệ
+            Texture mainTex = mapTextures[i][1];
+            if (mainTex == null) continue;
+            mapBounds.set(centerX + d * SPACING - w / 2f, centerY - h / 2f, w, h);
+            ScissorStack.calculateScissors(camera, batch.getTransformMatrix(), mapBounds, scissors);
+            batch.flush();
+            if (!ScissorStack.pushScissors(scissors)) continue;
+
+            float fit = Math.min(w / mainTex.getWidth(), h / mainTex.getHeight());
+            float x = centerX + d * SPACING - mainTex.getWidth() * fit / 2f;   // góc dưới trái của map
+            float y = centerY - mainTex.getHeight() * fit / 2f;
+
+            // Kích thước map chính đang hiển thị; bg và front tính theo nó, giống hệt trong trận
+            float mapW = mainTex.getWidth() * fit, mapH = mainTex.getHeight() * fit;
+
             batch.setColor(1f, 1f, 1f, alpha);
-            batch.draw(mapTextures[i], centerX + d * SPACING - w / 2f, centerY - h / 2f, w, h);
+            Texture bgTex = mapTextures[i][0], frontTex = mapTextures[i][2];
+            if (bgTex != null) {
+                float s = MapData.layerScale(bgTex, mapW, mapH, true);
+                batch.draw(bgTex, x, y, bgTex.getWidth() * s, bgTex.getHeight() * s);
+            }
+            batch.draw(mainTex, x, y, mapW, mapH);
+            if (frontTex != null) {
+                float s = MapData.layerScale(frontTex, mapW, mapH, false);
+                batch.draw(frontTex, x, y, frontTex.getWidth() * s, frontTex.getHeight() * s);
+            }
+            batch.flush();
+            ScissorStack.popScissors();
         }
         batch.setColor(Color.WHITE); // trả lại màu, tránh ảnh hưởng chỗ khác
         batch.end();
@@ -139,6 +183,7 @@ public class MapSelectScreen implements Screen {
         batch.dispose();
         shapeRenderer.dispose();
         backgroundTexture.dispose();
-        for (Texture t : mapTextures) if (t != null) t.dispose();
+        for (Texture[] layers : mapTextures)
+            for (Texture t : layers) if (t != null) t.dispose();
     }
 }

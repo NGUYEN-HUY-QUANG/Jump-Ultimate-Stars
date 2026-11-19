@@ -7,16 +7,18 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 
 /**
- * Bản "đang chạy" của một map: giữ Texture ảnh nền và biết cách vẽ map đó.
+ * Bản "đang chạy" của một map: giữ 3 Texture (bg, map, front) và biết cách vẽ map đó.
  *
  * Phân vai với MapInfo:
  *  - MapInfo: số liệu tĩnh theo PIXEL ẢNH (gốc DƯỚI-trái, y hướng lên), dùng chung được, không giữ tài nguyên.
  *  - MapData: giữ Texture, nhân số liệu với scale để ra tọa độ THẾ GIỚI (cùng gốc dưới-trái).
  *
+ * Thứ tự vẽ trong trận: renderBg -> renderMap -> (nhân vật, effect) -> renderFront.
+ *
  * Vòng đời bắt buộc: new MapData(info) -> load() -> (dùng) -> dispose().
  *
- * THẾ GIỚI: rộng = ảnh * scale, cao = ảnh * scale. Mọi hàm trả về / nhận pixel thế giới.
- * Fighter, effect và camera đều dùng hệ này.
+ * THẾ GIỚI: rộng = ảnh map * scale, cao = ảnh map * scale. Mọi hàm trả về / nhận pixel thế giới.
+ * Fighter, effect và camera đều dùng hệ này. Cả 3 lớp đều được vẽ vừa khít kích thước thế giới.
  */
 public class MapData {
 
@@ -29,33 +31,45 @@ public class MapData {
 
     private final MapInfo info;
 
-    // Ảnh nền. null nếu map chưa có ảnh (map tạm) hoặc chưa gọi load()
-    private Texture background;
+    // 3 lớp ảnh. bg và front có thể null (không có file). mapTex null nếu map chưa có ảnh (map tạm)
+    private Texture bg, mapTex, front;
 
-    // Kích thước thế giới (pixel) = ảnh * scale. Được đặt trong load()
+    // Kích thước thế giới (pixel) = ảnh map * scale. Được đặt trong load()
     private float worldW, worldH;
 
     public MapData(MapInfo info) { this.info = info; }
 
     /**
-     * Load ảnh nền từ disk (nếu map có ảnh) và đặt kích thước thế giới = ảnh * scale.
-     * Map tạm (không có ảnh) thì lấy kích thước cửa sổ hiện tại.
+     * Load 3 lớp ảnh từ disk (lớp nào không có file thì để null) và đặt kích thước thế giới = ảnh map * scale.
+     * Map tạm (không có ảnh map chính) thì lấy kích thước cửa sổ hiện tại.
      */
     public void load() {
-        if (info.backgroundPath != null) {
-            background = new Texture(Gdx.files.internal(info.backgroundPath));
-            background.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-            worldW = background.getWidth() * info.scale;
-            worldH = background.getHeight() * info.scale;
+        bg = loadOptional(info.bgPath);
+        mapTex = loadOptional(info.mapPath);
+        front = loadOptional(info.frontPath);
+
+        if (mapTex != null) {
+            worldW = mapTex.getWidth() * info.scale;
+            worldH = mapTex.getHeight() * info.scale;
         } else {
             worldW = Gdx.graphics.getWidth();
             worldH = Gdx.graphics.getHeight();
         }
     }
 
+    /** Load texture nếu file tồn tại, không có thì trả null. */
+    private static Texture loadOptional(String path) {
+        if (!Gdx.files.internal(path).exists()) return null;
+        Texture t = new Texture(Gdx.files.internal(path));
+        t.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        return t;
+    }
+
     /** Giải phóng Texture. BẮT BUỘC gọi trong dispose() của màn hình. */
     public void dispose() {
-        if (background != null) background.dispose();
+        if (bg != null) bg.dispose();
+        if (mapTex != null) mapTex.dispose();
+        if (front != null) front.dispose();
     }
 
     public float getWorldWidth() { return worldW; }
@@ -73,9 +87,36 @@ public class MapData {
     /** Tâm ngang (pixel thế giới) nơi P2 xuất hiện. */
     public float getP2SpawnX() { return info.p2SpawnX * info.scale; }
 
-    /** Vẽ ảnh nền đúng kích thước thế giới. Gọi giữa batch.begin() ... end(). */
-    public void renderBackground(SpriteBatch batch) {
-        if (background != null) batch.draw(background, 0, 0, worldW, worldH);
+    /**
+     * Hệ số phóng của lớp bg / front để vừa với map (3 ảnh có độ phân giải khác nhau nên mỗi lớp 1 hệ số riêng,
+     * nhưng luôn giữ tỉ lệ ảnh, không méo). Dùng chung cho trận đấu và màn chọn map.
+     *  - cover = true  (bg):    phủ kín cả map, có thể thừa ra ngoài một chút
+     *  - cover = false (front): vừa bề rộng map, cao bao nhiêu thì tùy tỉ lệ ảnh
+     *
+     * @param mapW, mapH kích thước map chính đang vẽ (pixel đích)
+     */
+    public static float layerScale(Texture t, float mapW, float mapH, boolean cover) {
+        float sw = mapW / t.getWidth();
+        return cover ? Math.max(sw, mapH / t.getHeight()) : sw;
+    }
+
+    /** Lớp sau cùng (phía sau map): phủ kín map, neo góc dưới trái. Gọi giữa batch.begin() ... end(). */
+    public void renderBg(SpriteBatch batch) {
+        if (bg == null) return;
+        float s = layerScale(bg, worldW, worldH, true);
+        batch.draw(bg, 0, 0, bg.getWidth() * s, bg.getHeight() * s);
+    }
+
+    /** Lớp map chính (đất, platform): theo scale của map. Gọi giữa batch.begin() ... end(). */
+    public void renderMap(SpriteBatch batch) {
+        if (mapTex != null) batch.draw(mapTex, 0, 0, worldW, worldH);
+    }
+
+    /** Lớp phía trước, vẽ SAU nhân vật: vừa bề rộng map, neo góc dưới trái. Gọi giữa batch.begin() ... end(). */
+    public void renderFront(SpriteBatch batch) {
+        if (front == null) return;
+        float s = layerScale(front, worldW, worldH, false);
+        batch.draw(front, 0, 0, front.getWidth() * s, front.getHeight() * s);
     }
 
     /**
@@ -84,7 +125,7 @@ public class MapData {
      * Gọi giữa shapeRenderer.begin(Filled) ... end().
      */
     public void renderPlaceholder(ShapeRenderer sr) {
-        if (background != null && !DEBUG_PLATFORMS) return;
+        if (mapTex != null && !DEBUG_PLATFORMS) return;
 
         sr.setColor(Color.RED);
         sr.rect(0, getGroundY() - GROUND_THICKNESS, worldW, GROUND_THICKNESS);

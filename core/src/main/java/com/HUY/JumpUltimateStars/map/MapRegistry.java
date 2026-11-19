@@ -8,6 +8,9 @@ import java.util.List;
  *
  * Nơi duy nhất cần sửa khi thêm map mới / chỉnh đất: sửa trong static block.
  * Các màn hình khác (chọn map, GameScreen) chỉ đọc từ đây, không tự tạo MapInfo.
+ *
+ * Thêm map mới: tạo thư mục assets/maps/<id>/ chứa <id>.png (bắt buộc),
+ * <id>_bg.png và <id>_front.png (tùy chọn), rồi thêm 1 dòng ALL.add(...) bên dưới.
  */
 public class MapRegistry {
 
@@ -16,34 +19,30 @@ public class MapRegistry {
 
     static {
         // Thứ tự tham số:
-        //   id, tên hiển thị, ảnh nền, scale,
+        //   id, tên hiển thị, scale,
         //   groundY (pixel ảnh, từ mép DƯỚI lên), spawn P1 x, spawn P2 x (pixel ảnh, từ mép trái),
         //   platforms {xTrái, xPhải, y}  (pixel ảnh, y từ mép DƯỚI lên)
         //
-        // CÁC SỐ DƯỚI ĐÂY LÀ TẠM, giả sử ảnh 1280x720. Đo lại theo ảnh thật của m:
-        // chạy game, click chuột lên ảnh, console sẽ in ra tọa độ pixel ảnh tại điểm click.
+        // Đo số: bật MapData.DEBUG_PLATFORMS, chạy game, click chuột lên ảnh,
+        // console sẽ in ra tọa độ pixel ảnh tại điểm click.
 
         // Map 0: phẳng, không có platform
-        ALL.add(new MapInfo("map_0", "Map 0", "map/map_0.png", 4f,
+        ALL.add(new MapInfo("map_0", "Map 0", 1.5f,
             30f, 100f, 700f,
             new float[][] {}));
 
         // Map 1: 3 platform
-        ALL.add(new MapInfo("map_1", "Map 1", "map/map_1.png", 5f,
+        ALL.add(new MapInfo("map_1", "Map 1", 1.5f,
             18f, 44f, 360f,
             new float[][] {
-                {44f, 360f, 77f}, // giữa
-                {0f, 140f, 143f},// trái
-                {285f, 600f, 143f},// phải
+                {0f, 300f, 110f},   // trái
+                {715f, 1015f, 110f}, // phải
             }));
 
-        // Map 2: 3 platform
-        ALL.add(new MapInfo("map_2", "Map 2", "map/map_2.png", 4f,
+        // Map 2: 2 platform
+        ALL.add(new MapInfo("map_2", "Map 2", 1.5f,
             0f, 40f, 400f,
-            new float[][] {
-                {40f, 420f, 40f},// giua
-                {20f, 430f, 86f}, // tren
-            }));
+            new float[][] {}));
     }
 
     /**

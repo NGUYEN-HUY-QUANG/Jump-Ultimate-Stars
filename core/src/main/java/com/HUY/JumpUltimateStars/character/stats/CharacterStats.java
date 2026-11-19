@@ -26,7 +26,7 @@ public abstract class CharacterStats {
     // ===================== NHẢY =====================
 
     /** Vận tốc ban đầu khi nhảy (px/s). Càng lớn thì nhảy càng cao. */
-    public float jumpSpeed = 1000f;
+    public float jumpSpeed = 800f;
 
     /** Gia tốc rơi (px/s²). Càng lớn thì rơi càng nhanh, nhảy càng "nặng". */
     public float gravity = 2000f;
@@ -54,12 +54,12 @@ public abstract class CharacterStats {
     // ===================== THỦ =====================
 
     /** Sát thương nhận vào khi đang thủ (cố định, bất kể đòn mạnh hay yếu). */
-    public int guardDamage = 10;
+    public int guardDamage = 2;
 
     // ===================== HIỂN THỊ & MÁU =====================
 
     /** Hệ số phóng to nhân vật khi vẽ trong trận (nhân vào kích thước ảnh gốc). */
-    public float scale = 2.5f;
+    public float scale = 1.8f;
 
     /** Máu tối đa. */
     public int maxHp = 1000;

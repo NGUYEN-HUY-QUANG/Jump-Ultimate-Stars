@@ -30,6 +30,8 @@ import com.badlogic.gdx.utils.ScreenUtils;
  * THẾ GIỚI: kích thước = ảnh map (worldW x worldH). Fighter, đất, platform, effect đều
  * tính theo pixel thế giới. Cửa sổ chỉ là khung nhìn do FightCamera điều khiển.
  *
+ * THỨ TỰ VẼ: bg -> map -> (đường debug) -> lớp tối -> nhân vật -> marker -> effect -> front -> HUD.
+ *
  * HUD vẽ theo toạ độ MÀN HÌNH (camera riêng), luôn nằm trên cùng, không bị zoom theo FightCamera.
  *
  * VA CHẠM: đòn cận chiến / skill / ultimate do Fighter tự xét hitbox với đối thủ (setOpponent).
@@ -38,7 +40,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
  *
  * HIỆU ỨNG TỐI KHI ULTIMATE: Fighter vừa bước vào ULTIMATE mà chiêu có darkTime > 0 thì map tối
  * trong darkTime giây. Trong lúc tối chỉ người tung chiêu được update, đối thủ đứng im hoàn toàn,
- * va chạm effect tạm tắt. Lớp tối phủ lên map, nhân vật vẽ sau nên vẫn sáng.
+ * va chạm effect tạm tắt. Lớp tối phủ lên bg + map, nhân vật và front vẽ sau nên vẫn sáng.
  *
  * Tài nguyên (batch, shapeRenderer, animManager, map, hud, effect + marker của Fighter) tạo trong show()
  * và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(), không tự dispose.
@@ -214,9 +216,10 @@ public class GameScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         shapeRenderer.setProjectionMatrix(camera.combined);
 
-        // Lớp 1: nền map (vẽ đúng kích thước thế giới)
+        // Lớp 1: nền sau (bg) rồi map chính, đều vẽ đúng kích thước thế giới
         batch.begin();
-        map.renderBackground(batch);
+        map.renderBg(batch);
+        map.renderMap(batch);
         batch.end();
 
         // Lớp 2: đường đỏ làm đất tạm / đường debug platform
@@ -224,7 +227,7 @@ public class GameScreen implements Screen {
         map.renderPlaceholder(shapeRenderer);
         shapeRenderer.end();
 
-        // Lớp 2.5: phủ tối lên map (nhân vật vẽ sau nên vẫn sáng)
+        // Lớp 2.5: phủ tối lên bg + map (nhân vật và front vẽ sau nên vẫn sáng)
         if (dimAlpha > 0f) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -234,7 +237,7 @@ public class GameScreen implements Screen {
             shapeRenderer.end();
         }
 
-        // Lớp 3: nhân vật, marker P1/P2 trên đầu, rồi effect đè lên
+        // Lớp 3: nhân vật, marker P1/P2 trên đầu, effect đè lên, cuối cùng là front đè lên tất cả
         batch.begin();
         fighter1.draw(batch);
         if (fighter2 != null) fighter2.draw(batch);
@@ -242,6 +245,7 @@ public class GameScreen implements Screen {
         if (fighter2 != null) fighter2.drawMarker(batch);
         fighter1.drawEffects(batch);
         if (fighter2 != null) fighter2.drawEffects(batch);
+        map.renderFront(batch);
         batch.end();
 
         // Lớp 4: HUD (toạ độ màn hình, tự begin/end và tự đặt projection riêng)

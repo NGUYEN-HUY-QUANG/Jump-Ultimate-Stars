@@ -587,7 +587,11 @@ public class Fighter {
      * không thủ thì nhận nguyên dame.
      */
     public int calcIncomingDamage(int rawDamage) {
-        return state == State.DEFEND ? stats.guardDamage : rawDamage;
+        return isBlocking() ? stats.guardDamage : rawDamage;
+    }
+
+    private boolean isBlocking() {
+        return state == State.DEFEND || (state == State.FREE && controller.isDefendHeld());
     }
 
     // ===================== NHẢY / RƠI / CHẠM ĐẤT =====================
@@ -962,12 +966,14 @@ public class Fighter {
      */
     public void takeDamage(int rawDamage, float sourceX, boolean knockdown) {
         if (isInvulnerable()) return;
+        boolean blocking = isBlocking();
+        if (blocking && state == State.FREE) startDefend();
         if (state == State.ULTIMATE) ult.cancel();
 
         hp = Math.max(0, hp - calcIncomingDamage(rawDamage));
         addEnergy(ENERGY_ON_HURT);   // bị dính đòn (kể cả đang thủ) đều hồi energy
 
-        if (state == State.DEFEND) {
+        if (blocking) {
             if (sourceX < centerX) facingLeft = true;
             else if (sourceX > centerX) facingLeft = false;
             return;   // update() sẽ tự setFlipX(facingLeft) ở cuối frame
