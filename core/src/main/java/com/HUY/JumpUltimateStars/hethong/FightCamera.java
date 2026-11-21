@@ -10,6 +10,7 @@ import com.badlogic.gdx.math.MathUtils;
  *  - Gần nhau  -> khung nhìn hẹp (zoom vào, nhân vật to).
  *  - Xa nhau   -> khung nhìn rộng (zoom ra).
  *  - Khung nhìn không bao giờ lớn hơn map và không bao giờ trượt ra ngoài map.
+ *  - setFocus(f): zoom vào riêng 1 nhân vật (lúc ăn mừng thắng). clearFocus() để về như cũ.
  *
  * Cách dùng: new FightCamera(...) -> snapTo(...) lúc vào trận -> mỗi frame update(...)
  * rồi dùng getCamera().combined làm projection cho batch / shapeRenderer.
@@ -20,6 +21,9 @@ public class FightCamera {
 
     /** Khung nhìn rộng tối thiểu (zoom vào tối đa). Nhỏ hơn = nhân vật to hơn khi đứng sát nhau. */
     private static final float MIN_VIEW_W = 800f;
+
+    /** Khung nhìn rộng khi zoom vào người thắng. Nhỏ hơn = zoom sát hơn. */
+    private static final float FOCUS_VIEW_W = 350f;
 
     /** Lề ngang chừa thêm ở 2 bên nhân vật ngoài cùng. */
     private static final float PADDING_X = 250f;
@@ -39,6 +43,9 @@ public class FightCamera {
     // Đích mà camera đang đuổi theo
     private float targetX, targetY, targetViewW;
 
+    // Nhân vật đang được zoom riêng (null = theo cả 2 như bình thường)
+    private Fighter focus;
+
     public FightCamera(float screenW, float screenH, float worldW, float worldH) {
         this.worldW = worldW;
         this.worldH = worldH;
@@ -47,13 +54,19 @@ public class FightCamera {
 
     public OrthographicCamera getCamera() { return cam; }
 
+    /** Zoom vào 1 nhân vật (người thắng). */
+    public void setFocus(Fighter f) { focus = f; }
+
+    /** Trở lại theo dõi cả 2 nhân vật. */
+    public void clearFocus() { focus = null; }
+
     /** Khi đổi kích thước cửa sổ: giữ nguyên vị trí, chỉ đổi khung. */
     public void resize(float screenW, float screenH) {
         cam.viewportWidth = screenW;
         cam.viewportHeight = screenH;
     }
 
-    /** Đặt camera vào đúng đích ngay lập tức (không lerp). Gọi 1 lần lúc vào trận. */
+    /** Đặt camera vào đúng đích ngay lập tức (không lerp). Gọi 1 lần lúc vào trận / round mới. */
     public void snapTo(Fighter a, Fighter b) {
         computeTarget(a, b);
         cam.zoom = targetViewW / cam.viewportWidth;
@@ -85,6 +98,14 @@ public class FightCamera {
     }
 
     private void computeTarget(Fighter a, Fighter b) {
+        // Zoom riêng vào người thắng
+        if (focus != null) {
+            targetX = focus.getCenterX();
+            targetY = focus.getFeetY() + BODY_OFFSET_Y;
+            targetViewW = Math.min(FOCUS_VIEW_W, maxViewW());
+            return;
+        }
+
         float ax = a.getCenterX();
         float ay = a.getFeetY() + BODY_OFFSET_Y;
         float minX = ax, maxX = ax, minY = ay, maxY = ay;

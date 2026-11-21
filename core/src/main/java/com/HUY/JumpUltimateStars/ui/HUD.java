@@ -27,6 +27,7 @@ import com.badlogic.gdx.utils.IntArray;
  *   - rect ĐỎ  : dài tới mức "máu trễ" (trail), tụt dần về máu thật sau TRAIL_DELAY giây
  *   - rect XANH: dài tới máu thật, vẽ đè lên đỏ (phần đỏ lộ ra = máu vừa mất)
  * Số máu còn lại nằm sát mép phải của thanh P1 (trừ HP_TEXT_PAD), P2 đối xứng (mép trái).
+ * Ngay dưới số máu là các viên ngọc thắng round (win.png): P1 từ phải sang trái, P2 từ trái sang phải.
  *
  * Góc dưới màn hình: energy của mỗi bên. Rect màu nằm dưới energy_bar.png, 3 lớp xanh dương -> vàng -> đỏ
  * chồng lên nhau, đầy cả 3 thì nhấp nháy 3 màu. Ô icon ghi số thanh đã đầy (0..3).
@@ -36,7 +37,7 @@ import com.badlogic.gdx.utils.IntArray;
  *   render():  hud.update(delta); ... vẽ SAU CÙNG: hud.render(batch);
  *   resize():  hud.resize(width, height);
  *   dispose(): hud.dispose();
- *   Khi máu / energy đổi: hud.setP1Hp(hp) / setP2Hp(hp) / setP1Energy(e) / setP2Energy(e)
+ *   Khi máu / energy / số trận thắng đổi: setP1Hp / setP2Hp / setP1Energy / setP2Energy / setP1Wins / setP2Wins
  */
 public class HUD {
 
@@ -48,6 +49,7 @@ public class HUD {
     private static final String TIME_OVERLAY_PATH = "HUD/time.png";
     private static final String ENERGY_ICON_PATH = "HUD/energy.png";
     private static final String ENERGY_BAR_PATH = "HUD/energy_bar.png";
+    private static final String WIN_PATH = "HUD/win.png";
 
     // ===================== BỐ CỤC CHUNG =====================
 
@@ -88,6 +90,15 @@ public class HUD {
     /** Chiều cao chữ so với chiều cao thanh máu (0.4 = 40%). */
     private static final float HP_TEXT_RATIO = 0.4f;
 
+    // ===================== NGỌC THẮNG ROUND =====================
+
+    /** Chiều cao viên ngọc so với chiều cao thanh máu. */
+    private static final float WIN_ICON_RATIO = 0.6f;
+    /** Khoảng cách từ đáy thanh máu xuống viên ngọc (pixel màn hình). */
+    private static final float WIN_GAP = 2f;
+    /** Khoảng cách giữa 2 viên ngọc (pixel màn hình). */
+    private static final float WIN_SPACING = 4f;
+
     // ===================== ENERGY (góc dưới) =====================
 
     private static final float ENERGY_MARGIN = 12f;
@@ -111,6 +122,7 @@ public class HUD {
     private final Texture timeOverlayTex;
     private final Texture energyIconTex;
     private final Texture energyBarTex;
+    private final Texture winTex;
     private final Texture whitePx;      // 1 pixel trắng để vẽ rect
     private final Texture avatar1;
     private final Texture avatar2;      // null khi chơi 1 người
@@ -127,6 +139,8 @@ public class HUD {
 
     private float energy1, energy2;
     private float flashTime;                // đồng hồ nhấp nháy energy
+
+    private int wins1, wins2;               // số round đã thắng
 
     private final OrthographicCamera camera = new OrthographicCamera();
 
@@ -148,6 +162,7 @@ public class HUD {
         energyIconTex = new Texture(Gdx.files.internal(ENERGY_ICON_PATH));
         energyIconTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         energyBarTex = new Texture(Gdx.files.internal(ENERGY_BAR_PATH));
+        winTex = new Texture(Gdx.files.internal(WIN_PATH));
 
         Pixmap px = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         px.setColor(Color.WHITE);
@@ -189,6 +204,10 @@ public class HUD {
     public void setP1Energy(float e) { energy1 = e; }
     public void setP2Energy(float e) { energy2 = e; }
 
+    /** Đặt số round đã thắng (số viên ngọc hiện ra). */
+    public void setP1Wins(int w) { wins1 = w; }
+    public void setP2Wins(int w) { wins2 = w; }
+
     /** Gọi mỗi frame (trước render) để rect đỏ tụt dần về máu thật và energy nhấp nháy. */
     public void update(float delta) {
         flashTime += delta;
@@ -214,8 +233,8 @@ public class HUD {
         batch.begin();
         batch.setColor(Color.WHITE);
 
-        drawSide(batch, avatar1, p1FrameX, p1BarX, false, hp1, trail1, maxHp1);
-        if (avatar2 != null) drawSide(batch, avatar2, p2FrameX, p2BarX, true, hp2, trail2, maxHp2);
+        drawSide(batch, avatar1, p1FrameX, p1BarX, false, hp1, trail1, maxHp1, wins1);
+        if (avatar2 != null) drawSide(batch, avatar2, p2FrameX, p2BarX, true, hp2, trail2, maxHp2, wins2);
 
         batch.draw(timeTex, timeX, timeY, timeW, timeH);
         batch.draw(timeOverlayTex, overlayX, overlayY, overlayW, overlayH);
@@ -234,6 +253,7 @@ public class HUD {
         timeOverlayTex.dispose();
         energyIconTex.dispose();
         energyBarTex.dispose();
+        winTex.dispose();
         whitePx.dispose();
         font.dispose();
         avatar1.dispose();
@@ -303,12 +323,12 @@ public class HUD {
     // ===================== VẼ =====================
 
     /**
-     * Vẽ 1 bên: avatar -> rect đỏ -> rect xanh -> hp_bar.png -> khung avatar -> số máu.
+     * Vẽ 1 bên: avatar -> rect đỏ -> rect xanh -> hp_bar.png -> khung avatar -> ngọc thắng -> số máu.
      * mirror = true cho P2. Máu mất từ mép NGOÀI vào, mép trong (sát time_bar) cố định.
      * Rect to bằng hp_bar.png và nằm đúng chỗ hp_bar.png.
      */
     private void drawSide(SpriteBatch batch, Texture avatar, float frameX, float barX,
-                          boolean mirror, float hp, float trail, float maxHp) {
+                          boolean mirror, float hp, float trail, float maxHp, int wins) {
         // Avatar
         batch.setColor(Color.WHITE);
         batch.draw(avatar, frameX, frameY, frameW, frameH);
@@ -331,6 +351,16 @@ public class HUD {
         batch.draw(hpTex, barX, hpY, hpW, hpH, 0, 0, hpTex.getWidth(), hpTex.getHeight(), mirror, false);
         batch.draw(frameTex, frameX, frameY, frameW, frameH,
             0, 0, frameTex.getWidth(), frameTex.getHeight(), mirror, false);
+
+        // Ngọc thắng: dưới thanh máu, P1 từ mép phải đi sang trái, P2 từ mép trái đi sang phải
+        float wh = hpH * WIN_ICON_RATIO;
+        float ww = winTex.getWidth() * wh / winTex.getHeight();
+        float wy = hpY - wh - WIN_GAP;
+        for (int i = 0; i < wins; i++) {
+            float off = i * (ww + WIN_SPACING);
+            float wx = mirror ? barX + HP_TEXT_PAD + off : barX + hpW - HP_TEXT_PAD - ww - off;
+            batch.draw(winTex, wx, wy, ww, wh);
+        }
 
         // Số máu còn lại: P1 sát mép phải thanh (trừ HP_TEXT_PAD), P2 sát mép trái (cộng HP_TEXT_PAD)
         glyph.setText(font, String.valueOf((int) Math.ceil(hp)));

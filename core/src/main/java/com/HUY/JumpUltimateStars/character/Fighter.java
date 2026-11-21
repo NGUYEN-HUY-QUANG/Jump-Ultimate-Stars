@@ -40,6 +40,10 @@ import com.badlogic.gdx.utils.Array;
  *
  * Hitbox / hurtbox: đều là khung của frame sprite đang vẽ (1:1 với asset, đã nhân scale).
  *
+ * KHÓA PHÍM (setInputLocked): true thì mọi phím coi như không bấm (intro round, kết thúc round).
+ * Đòn đang ra dở vẫn chạy nốt bình thường.
+ * HẾT MÁU (knockOut): knockdown rồi nằm vĩnh viễn ở frame cuối animation knockout.
+ *
  * State machine:
  *
  *   FREE ──bấm J──> ATTACK ──hết animation──> RECOVERY ──hết giờ──> FREE
@@ -64,6 +68,7 @@ import com.badlogic.gdx.utils.Array;
  *        Đang trên không: rơi xuống (vẫn animation knockout). Chạm đất rồi nằm KNOCKDOWN_LIE_TIME giây
  *        ──> GET_UP ──hết animation──> FREE
  *        KNOCKDOWN / GET_UP: không nhận dame, không điều khiển được.
+ *        Nếu dead (hết máu): nằm mãi, không GET_UP.
  *   DEFEND ──bị dính đòn──> vẫn DEFEND (chỉ mất guardDamage, quay mặt về phía đòn nếu đánh từ sau,
  *        knockout cũng bị chặn)
  */
@@ -113,7 +118,7 @@ public class Fighter {
     // GET_UP: đứng dậy sau knockout, không nhận dame
     // ULTIMATE: tung ultimate (khóa cứng, class Ultimate tự điều khiển frame / di chuyển / dame)
     private enum State { FREE, ATTACK, RECOVERY, AIR, LAND, DASH, SKILL, DEFEND, AIR_ATTACK, AIR_SKILL, HIT,
-        KNOCKDOWN, GET_UP, ULTIMATE }
+        KNOCKDOWN, GET_UP, ULTIMATE, WIN }
 
     // ===================== THÀNH PHẦN =====================
 
@@ -139,6 +144,11 @@ public class Fighter {
     private Fighter opponent;                   // null nếu SINGLE
     private final Rectangle hurtbox = new Rectangle();    // dùng lại, tránh new mỗi frame
     private final Rectangle attackBox = new Rectangle();
+
+    // ===================== KHÓA PHÍM & HẾT MÁU =====================
+
+    private boolean inputLocked;    // true: bỏ qua mọi phím (intro, kết thúc round)
+    private boolean dead;           // hết máu: nằm luôn ở frame cuối knockout
 
     // ===================== VỊ TRÍ & HƯỚNG MẶT =====================
 
@@ -215,6 +225,10 @@ public class Fighter {
     private float knockdownTimer;    // đếm thời gian nằm sau khi chạm đất
     private float getUpTimer;        // thời gian còn lại của animation đứng dậy
 
+    // Pose thắng (thư mục ảnh "winner")
+    private static final String WIN_ACTION = "winner";
+    private static final float WIN_FRAME_DURATION = 0.2f;
+
     /**
      * @param animManager  cache animation dùng chung (không dispose ở đây)
      * @param charId       id nhân vật
@@ -258,6 +272,7 @@ public class Fighter {
         // NORMAL: knockout chạy hết thì giữ frame cuối (nằm) cho tới khi get_up
         animManager.get(charId, KNOCKDOWN_ACTION, KNOCKDOWN_FRAME_DURATION, Animation.PlayMode.NORMAL);
         animManager.get(charId, GET_UP_ACTION, GET_UP_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(charId, WIN_ACTION, WIN_FRAME_DURATION, Animation.PlayMode.NORMAL);
         if (stats.airMove != null) {
             animManager.get(charId, stats.airMove.action, stats.airMove.frameDuration, Animation.PlayMode.NORMAL);
         }
@@ -289,15 +304,17 @@ public class Fighter {
         if (dashCooldown > 0f) dashCooldown -= delta;
         if (skillCooldown > 0f) skillCooldown -= delta;
 
-        // Mỗi phím đọc 1 lần mỗi frame. dash và skillU đã gồm điều kiện cooldown
-        boolean atk = controller.isAttackPressed();
-        boolean jump = controller.isJumpPressed();
-        boolean dash = controller.isDashPressed() && dashCooldown <= 0f;
-        boolean skillKey = controller.isSkillUPressed();   // đọc 1 lần, rồi tách ra skill dưới đất / trên không
+        // Mỗi phím đọc 1 lần mỗi frame (khóa phím thì coi như không bấm).
+        // dash và skillU đã gồm điều kiện cooldown
+        boolean lk = inputLocked;
+        boolean atk = !lk && controller.isAttackPressed();
+        boolean jump = !lk && controller.isJumpPressed();
+        boolean dash = !lk && controller.isDashPressed() && dashCooldown <= 0f;
+        boolean skillKey = !lk && controller.isSkillUPressed();   // đọc 1 lần, rồi tách ra skill dưới đất / trên không
         boolean skillU = skillKey && stats.skillU != null && skillCooldown <= 0f;
         boolean airSkillU = skillKey && stats.airSkillU != null && !airSkillUsed && skillCooldown <= 0f;
-        boolean defend = controller.isDefendHeld();   // phím GIỮ, đúng liên tục
-        ultReady = controller.isUltimatePressed() && stats.ultimate != null
+        boolean defend = !lk && controller.isDefendHeld();   // phím GIỮ, đúng liên tục
+        ultReady = !lk && controller.isUltimatePressed() && stats.ultimate != null
             && energy >= CharacterStats.ENERGY_PER_BAR;
 
         switch (state) {
@@ -324,6 +341,7 @@ public class Fighter {
             case KNOCKDOWN: updateKnockdown(delta); break;
             case GET_UP:   updateGetUp(delta); break;
             case ULTIMATE: updateUltimate(delta); break;
+            case WIN:      break;   // đứng ở pose thắng, animation NORMAL tự giữ frame cuối
         }
 
         updateEffects(delta);
@@ -374,9 +392,14 @@ public class Fighter {
 
     // ===================== DI CHUYỂN =====================
 
+    /** Hướng đi theo phím (-1, 0, 1); khóa phím thì luôn 0. */
+    private int moveInput() {
+        return inputLocked ? 0 : controller.getMoveDirection();
+    }
+
     /** Đọc phím trái/phải, đổi hướng mặt và vị trí. Trả về hướng: -1, 0, 1. */
     private int moveHorizontal(float delta) {
-        int dir = controller.getMoveDirection();
+        int dir = moveInput();
         if (dir != 0) {
             facingLeft = dir < 0;
             centerX += dir * stats.moveSpeed * delta;
@@ -413,7 +436,7 @@ public class Fighter {
     private void updateAttack(float delta, boolean atk, boolean skillU) {
         if (atk) buffered = true;
         if (skillU) skillBuffered = true;
-        if (ultReady) ultBuffered = true;   // <-- thêm
+        if (ultReady) ultBuffered = true;
         stateTime += delta;
 
         int frame = Math.min((int) (stateTime / move.frameDuration), frameCount - 1);
@@ -591,7 +614,8 @@ public class Fighter {
     }
 
     private boolean isBlocking() {
-        return state == State.DEFEND || (state == State.FREE && controller.isDefendHeld());
+        return state == State.DEFEND
+            || (state == State.FREE && !inputLocked && controller.isDefendHeld());
     }
 
     // ===================== NHẢY / RƠI / CHẠM ĐẤT =====================
@@ -671,7 +695,7 @@ public class Fighter {
         if (atk && moves.length > 0) { startAttack(0); return; }
         if (defend) { startDefend(); return; }
 
-        if (controller.getMoveDirection() != 0) {
+        if (moveInput() != 0) {
             state = State.FREE;
             updateMovement(delta);
             return;
@@ -870,6 +894,7 @@ public class Fighter {
         }
 
         if (!KNOCKDOWN_ANIM_DONE) return;   // chưa xong animation thì chưa đếm giờ nằm
+        if (dead) return;                   // hết máu: nằm luôn, không đứng dậy
         knockdownTimer -= delta;
         if (knockdownTimer <= 0f) startGetUp();
     }
@@ -886,14 +911,45 @@ public class Fighter {
         if (getUpTimer <= 0f) state = State.FREE;
     }
 
-    /** Đang knockout / đứng dậy: không nhận dame, không điều khiển được. */
+    /** Đang knockout / đứng dậy / lướt: không nhận dame. */
     public boolean isInvulnerable() {
-        return state == State.KNOCKDOWN || state == State.GET_UP || state == State.DASH;
+        return state == State.KNOCKDOWN || state == State.GET_UP || state == State.DASH || state == State.WIN;
+    }
+
+    // ===================== KHÓA PHÍM & HẾT MÁU =====================
+
+    /** GameScreen khóa phím lúc intro / kết thúc round. */
+    public void setInputLocked(boolean locked) {
+        inputLocked = locked;
+    }
+
+    /** Hết máu: knockdown rồi nằm vĩnh viễn ở frame cuối. Gọi nhiều lần cũng chỉ có tác dụng 1 lần. */
+    public void knockOut() {
+        if (dead) return;
+        dead = true;
+        if (state != State.KNOCKDOWN) startKnockdown();   // đang knockdown sẵn thì để animation chạy tiếp
+    }
+
+    /** Đã rảnh để chạy pose thắng chưa: hết chiêu / đã hạ cánh / hết stun, đang đứng yên. */
+    public boolean isReadyForWinPose() {
+        return state == State.FREE;
+    }
+
+    /** Chạy pose thắng (animation "winner"), chạy 1 lần rồi giữ frame cuối. */
+    public void playWinPose() {
+        comboIndex = 0;
+        state = State.WIN;
+        character.playFromStart(WIN_ACTION, WIN_FRAME_DURATION);
+    }
+
+    /** Pose thắng đã chạy xong chưa. */
+    public boolean isWinPoseDone() {
+        return state == State.WIN && character.isAnimationFinished();
     }
 
     // ===================== GÂY / NHẬN DAME =====================
 
-    /** Gắn đối thủ để đòn cận chiến biết đánh ai. Gọi trong GameScreen.show(). */
+    /** Gắn đối thủ để đòn cận chiến biết đánh ai. Gọi trong GameScreen. */
     public void setOpponent(Fighter opponent) {
         this.opponent = opponent;
     }
@@ -1059,7 +1115,7 @@ public class Fighter {
         this.groundY = groundY;
     }
 
-    /** Gắn map để Fighter biết platform. Gọi 1 lần trong GameScreen.show(). */
+    /** Gắn map để Fighter biết platform. Gọi 1 lần trong GameScreen. */
     public void setMap(MapData map) {
         this.map = map;
     }
@@ -1074,7 +1130,7 @@ public class Fighter {
         return groundY + airY;
     }
 
-    /** Giải phóng Texture của effect còn sống và marker. Gọi khi thoát trận. */
+    /** Giải phóng Texture của effect còn sống và marker. Gọi khi thoát trận / sang round mới. */
     public void dispose() {
         for (Effect e : effects) e.cancel();
         effects.clear();

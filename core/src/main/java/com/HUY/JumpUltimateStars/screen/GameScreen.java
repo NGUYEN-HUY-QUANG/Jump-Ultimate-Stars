@@ -11,6 +11,7 @@ import com.HUY.JumpUltimateStars.hethong.PlayerController;
 import com.HUY.JumpUltimateStars.map.MapData;
 import com.HUY.JumpUltimateStars.map.MapInfo;
 import com.HUY.JumpUltimateStars.ui.HUD;
+import com.HUY.JumpUltimateStars.ui.RoundManager;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
@@ -23,16 +24,23 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 
 /**
- * Màn hình trận đấu. Chỉ điều phối: tạo map + 2 Fighter + camera + HUD, mỗi frame update rồi vẽ.
+ * Màn hình trận đấu. Chỉ điều phối: tạo map + 2 Fighter + camera + HUD + RoundManager,
+ * mỗi frame update rồi vẽ.
  * Logic nhân vật nằm ở Fighter, logic từng effect nằm trong class effect đó,
- * logic zoom / theo dõi nằm ở FightCamera, phần hiển thị thanh máu / energy / thời gian / avatar nằm ở HUD.
+ * logic zoom / theo dõi nằm ở FightCamera, phần hiển thị thanh máu / energy / thời gian / avatar nằm ở HUD,
+ * luồng round (ROUND, FIGHT, K.O, WINNER, đếm thắng) nằm ở RoundManager.
  *
  * THẾ GIỚI: kích thước = ảnh map (worldW x worldH). Fighter, đất, platform, effect đều
  * tính theo pixel thế giới. Cửa sổ chỉ là khung nhìn do FightCamera điều khiển.
  *
- * THỨ TỰ VẼ: bg -> map -> (đường debug) -> lớp tối -> nhân vật -> marker -> effect -> front -> HUD.
+ * THỨ TỰ VẼ: bg -> map -> (đường debug) -> lớp tối -> nhân vật -> marker -> effect -> front -> HUD -> hiệu ứng round.
  *
- * HUD vẽ theo toạ độ MÀN HÌNH (camera riêng), luôn nằm trên cùng, không bị zoom theo FightCamera.
+ * HUD và hiệu ứng round vẽ theo toạ độ MÀN HÌNH (camera riêng), không bị zoom theo FightCamera.
+ * HUD tắt khi zoom vào người thắng (ZOOM / WINNER).
+ *
+ * VÒNG ROUND: mỗi round tạo lại 2 Fighter (máu đầy, về chỗ xuất phát) nhưng GIỮ energy.
+ * Chưa PLAYING (intro / sau K.O) thì khóa phím cả 2. Hết máu -> Fighter.knockOut() + RoundManager.onKnockout().
+ * Thắng đủ số round thì về MainScreen.
  *
  * VA CHẠM: đòn cận chiến / skill / ultimate do Fighter tự xét hitbox với đối thủ (setOpponent).
  * Effect (phi tiêu, kame...) thì GameScreen xét mỗi frame bằng applyEffectHits().
@@ -42,7 +50,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
  * trong darkTime giây. Trong lúc tối chỉ người tung chiêu được update, đối thủ đứng im hoàn toàn,
  * va chạm effect tạm tắt. Lớp tối phủ lên bg + map, nhân vật và front vẽ sau nên vẫn sáng.
  *
- * Tài nguyên (batch, shapeRenderer, animManager, map, hud, effect + marker của Fighter) tạo trong show()
+ * Tài nguyên (batch, shapeRenderer, animManager, map, hud, rounds, effect + marker của Fighter) tạo trong show()
  * và PHẢI dispose() trong dispose(). Game.setScreen() chỉ gọi hide(), không tự dispose.
  */
 public class GameScreen implements Screen {
@@ -66,6 +74,7 @@ public class GameScreen implements Screen {
     private ShapeRenderer shapeRenderer;
     private CharacterAnimationManager animManager;
     private HUD hud;
+    private RoundManager rounds;
 
     private Fighter fighter1;
     private Fighter fighter2;       // null nếu SINGLE
@@ -98,6 +107,25 @@ public class GameScreen implements Screen {
         worldW = map.getWorldWidth();
         worldH = map.getWorldHeight();
 
+        fightCam = new FightCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), worldW, worldH);
+        createFighters();
+        fightCam.snapTo(fighter1, fighter2);
+
+        // HUD: avatar lấy từ CharacterData (cùng ảnh màn chọn nhân vật), P2 null khi SINGLE
+        hud = new HUD(p1Id, p2Id,
+            findData(p1Id).avatar,
+            p2Id != null ? findData(p2Id).avatar : null);
+        hud.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
+        rounds = new RoundManager();
+        rounds.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+    }
+
+    /** Tạo (hoặc tạo lại) 2 fighter với máu đầy, đúng chỗ xuất phát. */
+    private void createFighters() {
+        if (fighter1 != null) fighter1.dispose();
+        if (fighter2 != null) fighter2.dispose();
+
         // P1 bên trái quay phải, P2 bên phải quay trái
         fighter1 = new Fighter(animManager, p1Id, PlayerController.p1(), map.getP1SpawnX(), false);
         fighter1.setMap(map);
@@ -114,14 +142,25 @@ public class GameScreen implements Screen {
             fighter2.setOpponent(fighter1);
         }
 
-        fightCam = new FightCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), worldW, worldH);
-        fightCam.snapTo(fighter1, fighter2);
+        // Reset hiệu ứng tối
+        darkTimer = 0f;
+        dimAlpha = 0f;
+        darkCaster = null;
+        ult1Was = false;
+        ult2Was = false;
+    }
 
-        // HUD: avatar lấy từ CharacterData (cùng ảnh màn chọn nhân vật), P2 null khi SINGLE
-        hud = new HUD(p1Id, p2Id,
-            findData(p1Id).avatar,
-            p2Id != null ? findData(p2Id).avatar : null);
-        hud.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+    /** Sang round mới: tạo lại fighter nhưng giữ nguyên energy của 2 bên. */
+    private void startNextRound() {
+        float e1 = fighter1.getEnergy();
+        float e2 = fighter2 != null ? fighter2.getEnergy() : 0f;
+
+        createFighters();
+        fighter1.addEnergy(e1);
+        if (fighter2 != null) fighter2.addEnergy(e2);
+
+        fightCam.clearFocus();
+        fightCam.snapTo(fighter1, fighter2);
     }
 
     /** Tìm dữ liệu nhân vật theo id trong CharacterRegistry. */
@@ -159,6 +198,31 @@ public class GameScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        // --- Luồng round ---
+        // Báo RoundManager: người thắng đã rảnh chưa, pose winner đã xong chưa
+        if (fighter2 != null) {
+            Fighter winner = rounds.isWinnerP1() ? fighter1 : fighter2;
+            rounds.setWinnerStatus(winner.isReadyForWinPose(), winner.isWinPoseDone());
+        }
+
+        rounds.update(delta);
+        if (rounds.isMatchOver()) {
+            game.setScreen(new MainScreen(game));   // sửa theo constructor MainScreen của bạn
+            dispose();
+            return;
+        }
+        if (rounds.consumeNextRound()) startNextRound();
+
+        // Tới lúc người thắng làm pose winner
+        if (rounds.consumeWinPose() && fighter2 != null) {
+            (rounds.isWinnerP1() ? fighter1 : fighter2).playWinPose();
+        }
+
+        // Chưa PLAYING (intro / sau K.O) thì khóa phím của cả 2
+        boolean locked = !rounds.isPlaying();
+        fighter1.setInputLocked(locked);
+        if (fighter2 != null) fighter2.setInputLocked(locked);
+
         // --- Hiệu ứng tối khi ultimate ---
         boolean dark = darkTimer > 0f;
         if (dark) {
@@ -186,20 +250,38 @@ public class GameScreen implements Screen {
             ult2Was = u2;
         }
 
-        // Va chạm effect (tạm tắt khi đang tối), rồi đẩy máu + energy lên HUD
+        // Va chạm effect (tạm tắt khi đang tối / chưa PLAYING), rồi đẩy máu + energy lên HUD
         // (đòn cận chiến đã được Fighter tự xử lý trong update)
         if (fighter2 != null) {
-            if (!dark) {
+            if (!dark && rounds.isPlaying()) {
                 applyEffectHits(fighter1, fighter2);
                 applyEffectHits(fighter2, fighter1);
+            }
+            // Có người hết máu -> knockdown luôn + báo RoundManager (cộng thắng, bật K.O)
+            if (rounds.isPlaying()) {
+                if (fighter1.getHp() <= 0) {
+                    fighter1.knockOut();
+                    rounds.onKnockout(true);
+                } else if (fighter2.getHp() <= 0) {
+                    fighter2.knockOut();
+                    rounds.onKnockout(false);
+                }
             }
             hud.setP2Hp(fighter2.getHp());
             hud.setP2Energy(fighter2.getEnergy());
         }
         hud.setP1Hp(fighter1.getHp());
         hud.setP1Energy(fighter1.getEnergy());
+        hud.setP1Wins(rounds.getP1Wins());
+        hud.setP2Wins(rounds.getP2Wins());
         hud.update(delta);
 
+        // Camera: zoom vào người thắng lúc ZOOM / WINNER
+        if (rounds.isZoomPhase() && fighter2 != null) {
+            fightCam.setFocus(rounds.isWinnerP1() ? fighter1 : fighter2);
+        } else {
+            fightCam.clearFocus();
+        }
         fightCam.update(delta, fighter1, fighter2);   // SAU khi fighter đã update
 
         // --- Vẽ ---
@@ -248,8 +330,9 @@ public class GameScreen implements Screen {
         map.renderFront(batch);
         batch.end();
 
-        // Lớp 4: HUD (toạ độ màn hình, tự begin/end và tự đặt projection riêng)
-        hud.render(batch);
+        // Lớp 4: HUD (tắt khi zoom vào người thắng) rồi hiệu ứng ROUND / FIGHT / K.O / WINNER
+        if (rounds.isHudVisible()) hud.render(batch);
+        rounds.render(batch);
     }
 
     @Override
@@ -257,6 +340,7 @@ public class GameScreen implements Screen {
         // Chỉ đổi khung nhìn; vị trí nhân vật là tọa độ thế giới nên không cần co giãn
         fightCam.resize(width, height);
         hud.resize(width, height);
+        rounds.resize(width, height);
     }
 
     @Override public void pause() {}
@@ -272,5 +356,6 @@ public class GameScreen implements Screen {
         if (fighter2 != null) fighter2.dispose();
         map.dispose();
         hud.dispose();
+        rounds.dispose();
     }
 }
