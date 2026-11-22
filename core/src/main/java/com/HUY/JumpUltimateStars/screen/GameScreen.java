@@ -11,6 +11,7 @@ import com.HUY.JumpUltimateStars.hethong.PlayerController;
 import com.HUY.JumpUltimateStars.map.MapData;
 import com.HUY.JumpUltimateStars.map.MapInfo;
 import com.HUY.JumpUltimateStars.ui.HUD;
+import com.HUY.JumpUltimateStars.ui.HitCounter;
 import com.HUY.JumpUltimateStars.ui.RoundManager;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
@@ -75,6 +76,7 @@ public class GameScreen implements Screen {
     private CharacterAnimationManager animManager;
     private HUD hud;
     private RoundManager rounds;
+    private HitCounter hitCounter;
 
     private Fighter fighter1;
     private Fighter fighter2;       // null nếu SINGLE
@@ -119,6 +121,9 @@ public class GameScreen implements Screen {
 
         rounds = new RoundManager();
         rounds.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
+        hitCounter = new HitCounter();
+        hitCounter.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
     /** Tạo (hoặc tạo lại) 2 fighter với máu đầy, đúng chỗ xuất phát. */
@@ -148,6 +153,7 @@ public class GameScreen implements Screen {
         darkCaster = null;
         ult1Was = false;
         ult2Was = false;
+        if (hitCounter != null) hitCounter.reset();   // Fighter mới nên tổng hit về 0
     }
 
     /** Sang round mới: tạo lại fighter nhưng giữ nguyên energy của 2 bên. */
@@ -182,6 +188,7 @@ public class GameScreen implements Screen {
             if (dmg > 0) {
                 target.takeDamage(dmg, attacker.getCenterX(), e.isKnockdown());
                 attacker.addEnergy(e.getEnergy());
+                attacker.addHitCount();   // Fighter đếm số hit để HitCounter hiển thị
             }
         }
     }
@@ -275,6 +282,7 @@ public class GameScreen implements Screen {
         hud.setP1Wins(rounds.getP1Wins());
         hud.setP2Wins(rounds.getP2Wins());
         hud.update(delta);
+        hitCounter.update(fighter1.getHitsDealt(), fighter2 != null ? fighter2.getHitsDealt() : 0, delta);
 
         // Camera: zoom vào người thắng lúc ZOOM / WINNER
         if (rounds.isZoomPhase() && fighter2 != null) {
@@ -331,7 +339,10 @@ public class GameScreen implements Screen {
         batch.end();
 
         // Lớp 4: HUD (tắt khi zoom vào người thắng) rồi hiệu ứng ROUND / FIGHT / K.O / WINNER
-        if (rounds.isHudVisible()) hud.render(batch);
+        if (rounds.isHudVisible()) {
+            hud.render(batch);
+            hitCounter.render(batch);
+        }
         rounds.render(batch);
     }
 
@@ -341,6 +352,7 @@ public class GameScreen implements Screen {
         fightCam.resize(width, height);
         hud.resize(width, height);
         rounds.resize(width, height);
+        hitCounter.resize(width, height);
     }
 
     @Override public void pause() {}
@@ -357,5 +369,6 @@ public class GameScreen implements Screen {
         map.dispose();
         hud.dispose();
         rounds.dispose();
+        hitCounter.dispose();
     }
 }

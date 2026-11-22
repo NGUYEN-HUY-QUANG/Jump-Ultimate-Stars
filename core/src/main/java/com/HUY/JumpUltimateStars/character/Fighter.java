@@ -144,6 +144,7 @@ public class Fighter {
     private Fighter opponent;                   // null nếu SINGLE
     private final Rectangle hurtbox = new Rectangle();    // dùng lại, tránh new mỗi frame
     private final Rectangle attackBox = new Rectangle();
+    private int hitsDealt;      // số lần đã gây dame (để HitCounter đếm)
 
     // ===================== KHÓA PHÍM & HẾT MÁU =====================
 
@@ -987,6 +988,7 @@ public class Fighter {
             || !getAttackBox().overlaps(opponent.getHurtbox())) return false;
         opponent.takeDamage(damage, centerX, knockdown);
         addEnergy(energyGain);
+        hitsDealt++;
         return true;
     }
 
@@ -1073,6 +1075,15 @@ public class Fighter {
 
     public float getEnergy() {
         return energy;
+    }
+
+    public int getHitsDealt() {
+        return hitsDealt;
+    }
+
+    /** GameScreen gọi khi effect của mình (phi tiêu, kame...) trúng đối thủ. */
+    public void addHitCount() {
+        hitsDealt++;
     }
 
     // ===================== API CHO GAMESCREEN =====================
