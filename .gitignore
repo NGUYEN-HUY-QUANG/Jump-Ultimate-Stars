@@ -31,6 +31,13 @@ hs_err_pid*
 local.properties
 com_crashlytics_export_strings.xml
 
+
+## Game build & installer:
+*.exe
+*.zip
+JumpUltimateStars-Setup.exe
+
+
 ## Robovm:
 /ios/robovm-build/
 
