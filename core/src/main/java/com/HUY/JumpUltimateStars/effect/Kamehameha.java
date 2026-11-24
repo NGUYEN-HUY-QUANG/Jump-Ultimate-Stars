@@ -21,9 +21,9 @@ public class Kamehameha implements Effect {
     // ===== Chỉnh số ở đây =====
     private static final String FOLDER = "effects/kamehameha";
     private static final float FRAME_DURATION = 0.05f;
-    private static final float OFFSET_X = 60f;
-    private static final float OFFSET_Y = 60f;
-    private static final float SCALE = 4f;
+    private static final float OFFSET_X = 50f;
+    private static final float OFFSET_Y = 50f;
+    private static final float SCALE = 1f;
 
     private static final float START_TIME = 0.2f;       // hiện quả cầu tới giây này thì bắn
     private static final float GROW_SPEED = 6000f;      // px/s thân dài ra
@@ -38,6 +38,11 @@ public class Kamehameha implements Effect {
 
     private final Array<Texture> textures = new Array<>();
     private final Animation<TextureRegion> startAnim, headAnim, bodyAnim, tailAnim;
+    private final float offsetX;
+    private final float offsetY;
+    private final float scale;
+    private final int damage;
+
     private final int dir;
     private final float x;           // mép trước của tia, ngay trước mặt nhân vật
     private final float midY;
@@ -49,9 +54,18 @@ public class Kamehameha implements Effect {
     private final Rectangle hitbox = new Rectangle();
 
     public Kamehameha(float centerX, float footY, int dir) {
+        this(centerX, footY, dir, OFFSET_X, OFFSET_Y, SCALE, DAMAGE);
+    }
+
+    public Kamehameha(float centerX, float footY, int dir,
+                      float offsetX, float offsetY, float scale, int damage) {
         this.dir = dir;
-        this.x = centerX + dir * OFFSET_X;
-        this.midY = footY + OFFSET_Y;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
+        this.scale = scale;
+        this.damage = damage;
+        this.x = centerX + dir * offsetX;
+        this.midY = footY + offsetY;
         startAnim = loadAnim("kamehameha_start");
         headAnim = loadAnim("kamehameha_head");
         bodyAnim = loadAnim("kamehameha_body");
@@ -102,34 +116,34 @@ public class Kamehameha implements Effect {
 
         if (time < START_TIME) {
             TextureRegion s = startAnim.getKeyFrame(time);
-            drawPart(batch, s, 0, s.getRegionWidth() * SCALE, s.getRegionHeight() * SCALE);
+            drawPart(batch, s, 0, s.getRegionWidth() * scale, s.getRegionHeight() * scale);
             return;
         }
 
         TextureRegion head = headAnim.getKeyFrame(time);
         TextureRegion body = bodyAnim.getKeyFrame(time);
         TextureRegion tail = tailAnim.getKeyFrame(time);
-        float headW = head.getRegionWidth() * SCALE;
-        float tailW = tail.getRegionWidth() * SCALE;
+        float headW = head.getRegionWidth() * scale;
+        float tailW = tail.getRegionWidth() * scale;
 
-        drawPart(batch, head, 0,               headW,   head.getRegionHeight() * SCALE * thickness);
-        drawPart(batch, body, headW,           bodyLen, body.getRegionHeight() * SCALE * thickness);
-        drawPart(batch, tail, headW + bodyLen, tailW,   tail.getRegionHeight() * SCALE * thickness);
+        drawPart(batch, head, 0,               headW,   head.getRegionHeight() * scale * thickness);
+        drawPart(batch, body, headW,           bodyLen, body.getRegionHeight() * scale * thickness);
+        drawPart(batch, tail, headW + bodyLen, tailW,   tail.getRegionHeight() * scale * thickness);
     }
 
     @Override
     public int checkHit(Rectangle hurtbox) {
         if (!active || time < START_TIME || tickTimer > 0) return 0;
 
-        float len = headAnim.getKeyFrame(time).getRegionWidth() * SCALE
+        float len = headAnim.getKeyFrame(time).getRegionWidth() * scale
             + bodyLen
-            + tailAnim.getKeyFrame(time).getRegionWidth() * SCALE;
-        float h = bodyAnim.getKeyFrame(time).getRegionHeight() * SCALE * thickness;
+            + tailAnim.getKeyFrame(time).getRegionWidth() * scale;
+        float h = bodyAnim.getKeyFrame(time).getRegionHeight() * scale * thickness;
         hitbox.set(dir > 0 ? x : x - len, midY - h / 2f, len, h);
 
         if (hitbox.overlaps(hurtbox)) {
             tickTimer = TICK_INTERVAL;
-            return DAMAGE;
+            return damage;
         }
         return 0;
     }

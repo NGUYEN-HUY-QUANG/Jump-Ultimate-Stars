@@ -29,7 +29,7 @@ public class Character {
     private final CharacterAnimationManager animManager;
 
     // Id nhân vật, dùng để tra cứu animation qua animManager (vd "naruto_base")
-    private final String charId;
+    private String charId;
 
     // Animation hiện đang được chạy/hiển thị (vd idle, run, J1)
     private Animation<TextureRegion> currentAnim;
@@ -210,4 +210,14 @@ public class Character {
 
     /** Lấy id của nhân vật này. */
     public String getCharId() { return charId; }
+
+    /** Chuyển nguồn animation sang dạng nhân vật khác. */
+    public void setCharId(String charId) {
+        if (this.charId.equals(charId)) return;
+        this.charId = charId;
+        currentAnim = null;
+        currentAction = null;
+        stateTime = 0f;
+        frameLocked = false;
+    }
 }

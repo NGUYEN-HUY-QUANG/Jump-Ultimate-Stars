@@ -91,4 +91,7 @@ public abstract class CharacterStats {
 
     /** Ultimate (phím I), tốn 1 thanh energy. null = không có. Mỗi lần dùng tạo instance mới. */
     public Ultimate.Factory ultimate = null;
+
+    /** Biến hình sang dạng khác. null = nhân vật không có biến hình. */
+    public Transformation transformation = null;
 }

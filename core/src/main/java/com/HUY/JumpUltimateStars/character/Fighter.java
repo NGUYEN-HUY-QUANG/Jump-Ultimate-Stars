@@ -7,6 +7,7 @@ import com.HUY.JumpUltimateStars.character.stats.CharacterStats;
 import com.HUY.JumpUltimateStars.character.stats.CharacterStatsRegistry;
 import com.HUY.JumpUltimateStars.character.stats.Move;
 import com.HUY.JumpUltimateStars.character.stats.Skill;
+import com.HUY.JumpUltimateStars.character.stats.Transformation;
 import com.HUY.JumpUltimateStars.character.stats.Ultimate;
 import com.HUY.JumpUltimateStars.effect.Effect;
 import com.HUY.JumpUltimateStars.hethong.PlayerController;
@@ -107,16 +108,16 @@ public class Fighter {
     private static final float MARKER_HEAD_OFFSET = 0f;
 
     private enum State { FREE, ATTACK, RECOVERY, AIR, LAND, DASH, SKILL, DEFEND, AIR_ATTACK, AIR_SKILL, HIT,
-        KNOCKDOWN, GET_UP, ULTIMATE, WIN }
+        KNOCKDOWN, GET_UP, ULTIMATE, TRANSFORMATION, WIN, SKILL_RUSH }
 
     // ===================== THÀNH PHẦN =====================
 
     private final Character character;
     private final PlayerController controller;
-    private final CharacterStats stats;
+    private CharacterStats stats;
     private final CharacterAnimationManager animManager;
-    private final String charId;
-    private final Move[] moves;
+    private String charId;
+    private Move[] moves;
 
     private final Array<Effect> effects = new Array<>();
 
@@ -160,6 +161,7 @@ public class Fighter {
     private boolean buffered;
     private boolean skillBuffered;
     private boolean ultBuffered;
+    private boolean transformationBuffered;
     private boolean hitDone;
 
     // ===================== SKILL =====================
@@ -170,12 +172,19 @@ public class Fighter {
     private int skillNextHit;
     private boolean skillSpawned;
     private float skillCooldown;
+    private float rushLeft;   // quãng lướt còn lại của skill rush
 
     // ===================== ULTIMATE =====================
 
     private Ultimate ult;
     private final Ultimate.Context ultCtx = new Ultimate.Context();
     private boolean ultReady;
+
+    // ===================== BIẾN HÌNH =====================
+
+    private Transformation activeTransformation;
+    private float transformationTime;
+    private int transformationFrameCount;
 
     // ===================== NHẢY / LƯỚT =====================
 
@@ -222,51 +231,59 @@ public class Fighter {
     public Fighter(CharacterAnimationManager animManager, String charId,
                    PlayerController controller, float startCenterX, boolean facingLeft) {
         this.animManager = animManager;
-        this.charId = charId;
         this.controller = controller;
-        this.stats = CharacterStatsRegistry.get(charId);
-        this.moves = stats.moves;
-        this.hp = stats.maxHp;
         this.centerX = startCenterX;
         this.facingLeft = facingLeft;
 
-        // Load sẵn animation đòn đánh kiểu NORMAL. Phải làm TRƯỚC mọi chỗ khác.
+        character = new Character(animManager, charId);
+        setCharacterForm(charId);
+        hp = stats.maxHp;
+        character.setFlipX(facingLeft);
+    }
+
+    /** Cập nhật stats và nạp toàn bộ animation cho dạng đang sử dụng. */
+    private void setCharacterForm(String id) {
+        charId = id;
+        stats = CharacterStatsRegistry.get(id);
+        moves = stats.moves;
+        character.setCharId(id);
+        character.setScale(stats.scale);
+
         for (Move m : moves) {
-            animManager.get(charId, m.action, m.frameDuration, Animation.PlayMode.NORMAL);
+            animManager.get(id, m.action, m.frameDuration, Animation.PlayMode.NORMAL);
         }
 
-        character = new Character(animManager, charId);
-        character.setScale(stats.scale);
-        character.playAnimation("idle", IDLE_FRAME_DURATION);
-
-        TextureRegion idle0 = animManager.get(charId, "idle", IDLE_FRAME_DURATION).getKeyFrames()[0];
-        headHeight = idle0.getRegionHeight() * stats.scale;
-
-        animManager.get(charId, "jump", JUMP_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, "fall", FALL_FRAME_DURATION, Animation.PlayMode.LOOP);
-        animManager.get(charId, "land", LAND_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, "dash", DASH_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, "def", DEFEND_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, "hit", HIT_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, KNOCKDOWN_ACTION, KNOCKDOWN_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, GET_UP_ACTION, GET_UP_FRAME_DURATION, Animation.PlayMode.NORMAL);
-        animManager.get(charId, WIN_ACTION, WIN_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, "jump", JUMP_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, "fall", FALL_FRAME_DURATION, Animation.PlayMode.LOOP);
+        animManager.get(id, "land", LAND_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, "dash", DASH_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, "def", DEFEND_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, "hit", HIT_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, KNOCKDOWN_ACTION, KNOCKDOWN_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, GET_UP_ACTION, GET_UP_FRAME_DURATION, Animation.PlayMode.NORMAL);
+        animManager.get(id, WIN_ACTION, WIN_FRAME_DURATION, Animation.PlayMode.NORMAL);
         if (stats.airMove != null) {
-            animManager.get(charId, stats.airMove.action, stats.airMove.frameDuration, Animation.PlayMode.NORMAL);
+            animManager.get(id, stats.airMove.action, stats.airMove.frameDuration, Animation.PlayMode.NORMAL);
         }
         if (stats.airSkillU != null) {
-            animManager.get(charId, stats.airSkillU.action, stats.airSkillU.frameDuration, Animation.PlayMode.NORMAL);
+            animManager.get(id, stats.airSkillU.action, stats.airSkillU.frameDuration, Animation.PlayMode.NORMAL);
         }
         if (stats.skillU != null) {
-            animManager.get(charId, stats.skillU.action, stats.skillU.frameDuration, Animation.PlayMode.NORMAL);
+            animManager.get(id, stats.skillU.action, stats.skillU.frameDuration, Animation.PlayMode.NORMAL);
         }
         if (stats.ultimate != null) {
             Ultimate u = stats.ultimate.create();
-            animManager.get(charId, u.action, u.frameDuration, Animation.PlayMode.NORMAL);
+            animManager.get(id, u.action, u.frameDuration, Animation.PlayMode.NORMAL);
         }
 
-        character.setRefWidth(character.getCurrentFrameWidth());
-        character.setFlipX(facingLeft);
+        TextureRegion idle0 = animManager.get(id, "idle", IDLE_FRAME_DURATION).getKeyFrames()[0];
+        headHeight = idle0.getRegionHeight() * stats.scale;
+        character.setRefWidth(idle0.getRegionWidth() * stats.scale);
+        character.playFromStart("idle", IDLE_FRAME_DURATION);
+        if (stats.transformation != null) {
+            animManager.get(id, stats.transformation.action, stats.transformation.frameDuration,
+                Animation.PlayMode.NORMAL);
+        }
     }
 
     // ===================== UPDATE =====================
@@ -291,6 +308,8 @@ public class Fighter {
         boolean skillU = skillKey && stats.skillU != null && skillCooldown <= 0f;
         boolean airSkillU = skillKey && stats.airSkillU != null && !airSkillUsed && skillCooldown <= 0f;
         boolean defend = !lk && controller.isDefendHeld();
+        boolean transform = !lk && controller.isTransformationPressed()
+            && canStartTransformation();
         ultReady = !lk && controller.isUltimatePressed() && stats.ultimate != null
             && energy >= CharacterStats.ENERGY_PER_BAR;
 
@@ -298,25 +317,28 @@ public class Fighter {
             case FREE:
                 if (dash) startDash();
                 else if (jump) startJump();
+                else if (transform) startTransformation();
                 else if (ultReady) startUltimate();
                 else if (skillU) startSkill(stats.skillU);
                 else if (atk && moves.length > 0) startAttack(0);
                 else if (defend) startDefend();
                 else updateMovement(delta);
                 break;
-            case ATTACK:   updateAttack(delta, atk, skillU); break;
-            case RECOVERY: updateRecovery(delta, atk, jump, dash, skillU, defend); break;
+            case ATTACK:   updateAttack(delta, atk, skillU, transform); break;
+            case RECOVERY: updateRecovery(delta, atk, jump, dash, skillU, defend, transform); break;
             case AIR:      updateAir(delta, atk, jump, dash, airSkillU); break;
             case AIR_SKILL: updateAirSkill(delta); break;
             case AIR_ATTACK: updateAirAttack(delta, airSkillU); break;
-            case LAND:     updateLand(delta, atk, jump, dash, skillU, defend); break;
+            case LAND:     updateLand(delta, atk, jump, dash, skillU, defend, transform); break;
             case DASH:     updateDash(delta); break;
             case SKILL:    updateSkill(delta); break;
+            case SKILL_RUSH: updateSkillRush(delta); break;
             case DEFEND:   updateDefend(delta, defend); break;
             case HIT:      updateHit(delta); break;
             case KNOCKDOWN: updateKnockdown(delta); break;
             case GET_UP:   updateGetUp(delta); break;
             case ULTIMATE: updateUltimate(delta); break;
+            case TRANSFORMATION: updateTransformation(delta); break;
             case WIN:      break;
         }
 
@@ -391,15 +413,17 @@ public class Fighter {
         buffered = false;
         skillBuffered = false;
         ultBuffered = false;
+        transformationBuffered = false;
         hitDone = false;
         state = State.ATTACK;
         character.playFromStart(move.action, move.frameDuration);
     }
 
-    private void updateAttack(float delta, boolean atk, boolean skillU) {
+    private void updateAttack(float delta, boolean atk, boolean skillU, boolean transform) {
         if (atk) buffered = true;
         if (skillU) skillBuffered = true;
         if (ultReady) ultBuffered = true;
+        if (transform) transformationBuffered = true;
         stateTime += delta;
 
         int frame = Math.min((int) (stateTime / move.frameDuration), frameCount - 1);
@@ -410,6 +434,12 @@ public class Fighter {
         }
 
         int cancelFrame = Math.min(move.hitFrame + SKILL_CANCEL_DELAY_FRAMES, frameCount - 1);
+
+        if (transformationBuffered && frame >= cancelFrame && canStartTransformation()) {
+            comboIndex = 0;
+            startTransformation();
+            return;
+        }
 
         if (ultBuffered && frame >= cancelFrame
             && stats.ultimate != null && energy >= CharacterStats.ENERGY_PER_BAR) {
@@ -436,12 +466,13 @@ public class Fighter {
     }
 
     private void updateRecovery(float delta, boolean atk, boolean jump, boolean dash,
-                                boolean skillU, boolean defend) {
+                                boolean skillU, boolean defend, boolean transform) {
         boolean isLast = comboIndex == moves.length - 1;
         recoveryTimer -= delta;
 
         if (dash)   { comboIndex = 0; startDash(); return; }
         if (jump)   { comboIndex = 0; startJump(); return; }
+        if (transform) { comboIndex = 0; startTransformation(); return; }
         if (ultReady) { comboIndex = 0; startUltimate(); return; }
         if (skillU) { comboIndex = 0; startSkill(stats.skillU); return; }
         if (atk && !isLast) { startAttack(comboIndex + 1); return; }
@@ -458,6 +489,35 @@ public class Fighter {
     // ===================== SKILL U =====================
 
     private void startSkill(Skill s) {
+        if (s.rushDistance > 0f) startSkillRush(s);
+        else beginSkill(s);
+    }
+
+    /** Lướt tới trước (animation dash), chưa đánh. */
+    private void startSkillRush(Skill s) {
+        skill = s;
+        rushLeft = s.rushDistance;
+        skillBuffered = false;
+        int frames = animManager.get(charId, "dash", DASH_FRAME_DURATION).getKeyFrames().length;
+        state = State.SKILL_RUSH;
+        // Giãn animation dash cho vừa thời gian lướt tối đa
+        character.playFromStart("dash", (s.rushDistance / s.rushSpeed) / frames);
+    }
+
+    /** Lướt tới khi hộp đánh chạm đối thủ hoặc hết quãng thì tung skill. */
+    private void updateSkillRush(float delta) {
+        int dir = facingLeft ? -1 : 1;
+        float step = Math.min(skill.rushSpeed * delta, rushLeft);
+        centerX += dir * step;
+        rushLeft -= step;
+
+        boolean touching = opponent != null && !opponent.isInvulnerable()
+            && getAttackBox().overlaps(opponent.getHurtbox());
+        if (touching || rushLeft <= 0f) beginSkill(skill);
+    }
+
+    /** Bắt đầu tung skill (animation + hitFrames). */
+    private void beginSkill(Skill s) {
         skill = s;
         skillFrameCount = animManager.get(charId, s.action, s.frameDuration).getKeyFrames().length;
         skillTime = 0f;
@@ -520,6 +580,35 @@ public class Fighter {
         if (finished) state = State.FREE;
     }
 
+    // ===================== BIẾN HÌNH =====================
+
+    private boolean canStartTransformation() {
+        return stats.transformation != null && energy >= stats.transformation.energyCost;
+    }
+
+    private void startTransformation() {
+        activeTransformation = stats.transformation;
+        addEnergy(-activeTransformation.energyCost);
+        transformationTime = 0f;
+        transformationFrameCount = animManager.get(charId, activeTransformation.action,
+            activeTransformation.frameDuration, Animation.PlayMode.NORMAL).getKeyFrames().length;
+        transformationBuffered = false;
+        comboIndex = 0;
+        state = State.TRANSFORMATION;
+        character.playFromStart(activeTransformation.action, activeTransformation.frameDuration);
+    }
+
+    private void updateTransformation(float delta) {
+        transformationTime += delta;
+        if (transformationTime >= transformationFrameCount * activeTransformation.frameDuration) {
+            String targetId = activeTransformation.targetCharacterId;
+            activeTransformation = null;
+            setCharacterForm(targetId);
+            hp = Math.min(hp, stats.maxHp);
+            state = State.FREE;
+        }
+    }
+
     // ===================== THỦ =====================
 
     private void startDefend() {
@@ -540,6 +629,10 @@ public class Fighter {
 
     public boolean isUsingUltimate() {
         return state == State.ULTIMATE;
+    }
+
+    public boolean isTransforming() {
+        return state == State.TRANSFORMATION;
     }
 
     public float getUltimateDarkTime() {
@@ -621,9 +714,10 @@ public class Fighter {
     }
 
     private void updateLand(float delta, boolean atk, boolean jump, boolean dash,
-                            boolean skillU, boolean defend) {
+                            boolean skillU, boolean defend, boolean transform) {
         if (dash) { startDash(); return; }
         if (jump) { startJump(); return; }
+        if (transform) { startTransformation(); return; }
         if (ultReady) { startUltimate(); return; }
         if (skillU) { startSkill(stats.skillU); return; }
         if (atk && moves.length > 0) { startAttack(0); return; }
@@ -846,7 +940,8 @@ public class Fighter {
 
     /** Lướt / ultimate / skill lao / nằm / đứng dậy thì xuyên qua người kia được. */
     public boolean isPhasing() {
-        return state == State.DASH || state == State.ULTIMATE || state == State.AIR_SKILL
+        return state == State.DASH || state == State.ULTIMATE || state == State.TRANSFORMATION
+            || state == State.AIR_SKILL
             || state == State.KNOCKDOWN || state == State.GET_UP;
     }
 
@@ -953,6 +1048,7 @@ public class Fighter {
         boolean blocking = isBlocking();
         if (blocking && state == State.FREE) startDefend();
         if (state == State.ULTIMATE) ult.cancel();
+        if (state == State.TRANSFORMATION) activeTransformation = null;
 
         hp = Math.max(0, hp - calcIncomingDamage(rawDamage));
         addEnergy(ENERGY_ON_HURT);
@@ -999,6 +1095,10 @@ public class Fighter {
 
     public int getHp() {
         return hp;
+    }
+
+    public String getCharId() {
+        return charId;
     }
 
     // cho chế độ luyện tập

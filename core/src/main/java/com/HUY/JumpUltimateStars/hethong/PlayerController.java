@@ -44,6 +44,9 @@ public class PlayerController {
     // Mã phím ultimate (tốn 1 thanh energy)
     private final int keyUltimate;
 
+    // Mã phím biến hình
+    private final int keyTransformation;
+
     /**
      * @param keyLeft     mã phím đi sang trái (vd Keys.A)
      * @param keyRight    mã phím đi sang phải (vd Keys.D)
@@ -52,10 +55,12 @@ public class PlayerController {
      * @param keyDash     mã phím lướt (vd Keys.L)
      * @param keySkillU   mã phím skill U (vd Keys.U)
      * @param keyDefend   mã phím thủ (vd Keys.S)
-     * @param keyUltimate mã phím ultimate (vd Keys.I)
+     * @param keyUltimate      mã phím ultimate (vd Keys.I)
+     * @param keyTransformation mã phím biến hình
      */
     public PlayerController(int keyLeft, int keyRight, int keyAttack, int keyJump,
-                            int keyDash, int keySkillU, int keyDefend, int keyUltimate) {
+                            int keyDash, int keySkillU, int keyDefend, int keyUltimate,
+                            int keyTransformation) {
         this.keyLeft = keyLeft;
         this.keyRight = keyRight;
         this.keyAttack = keyAttack;
@@ -64,19 +69,20 @@ public class PlayerController {
         this.keySkillU = keySkillU;
         this.keyDefend = keyDefend;
         this.keyUltimate = keyUltimate;
+        this.keyTransformation = keyTransformation;
     }
 
     // Bộ phím mặc định của từng người chơi. Muốn đổi phím thì sửa ở 2 hàm này.
 
-    /** P1: A = trái, D = phải, J = tấn công, K = nhảy, L = lướt, U = skill U, S = thủ (giữ), I = ultimate. */
+    /** P1: A/D = di chuyển, J = tấn công, K = nhảy, L = lướt, U = skill, S = thủ, I = ultimate, O = biến hình. */
     public static PlayerController p1() {
-        return new PlayerController(Keys.A, Keys.D, Keys.J, Keys.K, Keys.L, Keys.U, Keys.S, Keys.I);
+        return new PlayerController(Keys.A, Keys.D, Keys.J, Keys.K, Keys.L, Keys.U, Keys.S, Keys.I, Keys.O);
     }
 
-    /** P2: mũi tên trái/phải = di chuyển, 1 = tấn công, 2 = nhảy, 3 = lướt, 4 = skill U, mũi tên xuống = thủ (giữ), 5 = ultimate. */
+    /** P2: mũi tên trái/phải = di chuyển, 1 = tấn công, 2 = nhảy, 3 = lướt, 4 = skill, xuống = thủ, 5 = ultimate, 6 = biến hình. */
     public static PlayerController p2() {
         return new PlayerController(Keys.LEFT, Keys.RIGHT, Keys.NUM_1, Keys.NUM_2, Keys.NUM_3, Keys.NUM_4,
-            Keys.DOWN, Keys.NUM_5);
+            Keys.DOWN, Keys.NUM_5, Keys.NUM_6);
     }
 
     /**
@@ -124,6 +130,11 @@ public class PlayerController {
      */
     public boolean isUltimatePressed() {
         return Gdx.input.isKeyJustPressed(keyUltimate);
+    }
+
+    /** true đúng 1 frame khi vừa bấm phím biến hình. */
+    public boolean isTransformationPressed() {
+        return Gdx.input.isKeyJustPressed(keyTransformation);
     }
 
     /** true liên tục khi còn GIỮ phím thủ (khác các phím bấm ở trên). */

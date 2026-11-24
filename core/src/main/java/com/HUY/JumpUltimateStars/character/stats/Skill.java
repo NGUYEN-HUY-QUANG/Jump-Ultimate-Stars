@@ -30,6 +30,10 @@ public class Skill {
     /** true = chỉ hit CUỐI trong hitFrames knockout, các hit trước chỉ là hit thường. */
     public final boolean knockdownOnLastHit;
 
+    // ----- Lướt trước khi đánh -----
+    public float rushDistance;   // 0 = không lướt
+    public float rushSpeed;      // pixel/giây
+
     // ----- Gọi effect -----
     public final Effect.Factory effect;   // null = skill không có effect
     public final int spawnFrame;          // frame sinh effect
@@ -71,6 +75,13 @@ public class Skill {
     /** Đặt energy hồi mỗi hit trúng: new Skill(...).energy(3f). */
     public Skill energy(float e) {
         this.energy = e;
+        return this;
+    }
+
+    /** Lướt tới trước tối đa distance px (tốc độ speed px/s) rồi mới tung skill. */
+    public Skill rush(float distance, float speed) {
+        this.rushDistance = distance;
+        this.rushSpeed = speed;
         return this;
     }
 }

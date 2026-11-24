@@ -26,6 +26,7 @@ public class CharacterRegistry {
     // Đây là nơi khai báo tất cả nhân vật của game.
     static {
         ALL.add(new CharacterData("goku_base", loadAvatar("characters/goku_base/icon.png")));
+        ALL.add(new CharacterData("goku_ssj", loadAvatar("characters/goku_ssj/icon.png")));
         ALL.add(new CharacterData("naruto_base", loadAvatar("characters/naruto_base/icon.png")));
         // thêm nhân vật mới: chỉ cần thêm 1 dòng ở đây
         // ALL.add(new CharacterData("archer", loadAvatar("archer_avatar.png")));

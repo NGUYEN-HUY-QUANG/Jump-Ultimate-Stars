@@ -124,14 +124,14 @@ public class HUD {
     private final Texture energyBarTex;
     private final Texture winTex;
     private final Texture whitePx;      // 1 pixel trắng để vẽ rect
-    private final Texture avatar1;
-    private final Texture avatar2;      // null khi chơi 1 người
+    private Texture avatar1;
+    private Texture avatar2;      // null khi chơi 1 người
 
     private final BitmapFont font = new BitmapFont();
     private final GlyphLayout glyph = new GlyphLayout();
 
-    private final float maxHp1;
-    private final float maxHp2;
+    private float maxHp1;
+    private float maxHp2;
     private float hp1;
     private float hp2;
     private float trail1, trail2;           // máu trễ (đơn vị HP)
@@ -203,6 +203,27 @@ public class HUD {
     /** Đặt energy hiện tại (0 .. ENERGY_PER_BAR * MAX_ENERGY_BARS). */
     public void setP1Energy(float e) { energy1 = e; }
     public void setP2Energy(float e) { energy2 = e; }
+
+    /** Cập nhật ảnh đại diện và máu tối đa khi nhân vật đổi dạng. */
+    public void setP1Character(String charId, TextureRegion avatar) {
+        Texture nextAvatar = buildAvatar(Gdx.files.internal(FRAME_PATH), avatar, false);
+        avatar1.dispose();
+        avatar1 = nextAvatar;
+        maxHp1 = CharacterStatsRegistry.get(charId).maxHp;
+        hp1 = Math.min(hp1, maxHp1);
+        trail1 = Math.max(hp1, Math.min(trail1, maxHp1));
+    }
+
+    /** Cập nhật ảnh đại diện và máu tối đa khi nhân vật đổi dạng. */
+    public void setP2Character(String charId, TextureRegion avatar) {
+        if (avatar2 == null) return;
+        Texture nextAvatar = buildAvatar(Gdx.files.internal(FRAME_PATH), avatar, true);
+        avatar2.dispose();
+        avatar2 = nextAvatar;
+        maxHp2 = CharacterStatsRegistry.get(charId).maxHp;
+        hp2 = Math.min(hp2, maxHp2);
+        trail2 = Math.max(hp2, Math.min(trail2, maxHp2));
+    }
 
     /** Đặt số round đã thắng (số viên ngọc hiện ra). */
     public void setP1Wins(int w) { wins1 = w; }

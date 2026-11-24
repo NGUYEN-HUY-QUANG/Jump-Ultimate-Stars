@@ -52,8 +52,8 @@ public class GameScreen implements Screen {
 
     private final MainGame game;
     private final CharacterSelectScreen.Mode mode;
-    private final String p1Id;
-    private final String p2Id;
+    private String p1Id;
+    private String p2Id;
     private final MapData map;
 
     private FightCamera fightCam;
@@ -186,6 +186,23 @@ public class GameScreen implements Screen {
         fightCam.snapTo(fighter1, fighter2);
     }
 
+    /** Giữ dạng hiện tại khi tạo Fighter mới ở round tiếp theo và đồng bộ HUD. */
+    private void syncCharacterForms() {
+        String currentP1Id = fighter1.getCharId();
+        if (!p1Id.equals(currentP1Id)) {
+            p1Id = currentP1Id;
+            hud.setP1Character(p1Id, findData(p1Id).avatar);
+        }
+
+        if (fighter2 != null) {
+            String currentP2Id = fighter2.getCharId();
+            if (!p2Id.equals(currentP2Id)) {
+                p2Id = currentP2Id;
+                hud.setP2Character(p2Id, findData(p2Id).avatar);
+            }
+        }
+    }
+
     private static CharacterData findData(String id) {
         for (CharacterData d : CharacterRegistry.ALL) {
             if (d.id.equals(id)) return d;
@@ -285,24 +302,30 @@ public class GameScreen implements Screen {
         if (fighter2 != null) fighter2.setInputLocked(locked);
 
         // --- Hiệu ứng tối khi ultimate ---
-        boolean dark = darkTimer > 0f;
-        if (dark) {
+        boolean ultimateDark = darkTimer > 0f;
+        if (ultimateDark) {
             darkTimer -= delta;
-            if (darkCaster != null && !darkCaster.isUsingUltimate()) darkTimer = 0f;
-            dark = darkTimer > 0f;
+            if (darkCaster != null && !darkCaster.isUsingUltimate() && !darkCaster.isTransforming()) {
+                darkTimer = 0f;
+            }
+            ultimateDark = darkTimer > 0f;
         }
-        fighter1.setUltimateDark(dark);
-        if (fighter2 != null) fighter2.setUltimateDark(dark);
-        dimAlpha = dark ? Math.min(dimAlpha + DARK_FADE_SPEED * delta, DARK_MAX_ALPHA)
-            : Math.max(dimAlpha - DARK_FADE_SPEED * delta, 0f);
+        fighter1.setUltimateDark(ultimateDark);
+        if (fighter2 != null) fighter2.setUltimateDark(ultimateDark);
 
         // --- Bot quyết định TRƯỚC khi fighter update ---
         if (bot != null) bot.update(delta);
 
         // --- Cập nhật ---
-        if (!dark || darkCaster == fighter1) fighter1.update(delta, worldW);
-        if (fighter2 != null && (!dark || darkCaster == fighter2)) fighter2.update(delta, worldW);
+        boolean transform1 = fighter1.isTransforming();
+        boolean transform2 = fighter2 != null && fighter2.isTransforming();
+        boolean dark = ultimateDark || transform1 || transform2;
+        if (!dark || darkCaster == fighter1 || transform1) fighter1.update(delta, worldW);
+        if (fighter2 != null && (!dark || darkCaster == fighter2 || transform2)) {
+            fighter2.update(delta, worldW);
+        }
         separateFighters();   // Fighter update xong mới biết vị trí cuối -> tách nhau ra
+        syncCharacterForms();
 
         // Phát hiện ai vừa bắt đầu ultimate
         boolean u1 = fighter1.isUsingUltimate();
@@ -313,6 +336,13 @@ public class GameScreen implements Screen {
             if (u2 && !ult2Was) startDark(fighter2);
             ult2Was = u2;
         }
+
+        if (fighter1.isTransforming()) darkCaster = fighter1;
+        else if (fighter2 != null && fighter2.isTransforming()) darkCaster = fighter2;
+        dark = darkTimer > 0f || fighter1.isTransforming()
+            || (fighter2 != null && fighter2.isTransforming());
+        dimAlpha = dark ? Math.min(dimAlpha + DARK_FADE_SPEED * delta, DARK_MAX_ALPHA)
+            : Math.max(dimAlpha - DARK_FADE_SPEED * delta, 0f);
 
         boolean training = mode == CharacterSelectScreen.Mode.TRAINING;
 
@@ -351,6 +381,10 @@ public class GameScreen implements Screen {
         // Camera
         if (rounds.isZoomPhase() && fighter2 != null) {
             fightCam.setFocus(rounds.isWinnerP1() ? fighter1 : fighter2);
+        } else if (fighter1.isTransforming()) {
+            fightCam.setFocus(fighter1);
+        } else if (fighter2 != null && fighter2.isTransforming()) {
+            fightCam.setFocus(fighter2);
         } else {
             fightCam.clearFocus();
         }

@@ -1,6 +1,6 @@
 
 #define MyAppName "JumpUltimateStars"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppExeName "JumpUltimateStars.exe"
 
 [Setup]

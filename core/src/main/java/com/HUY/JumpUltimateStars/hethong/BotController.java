@@ -76,7 +76,7 @@ public class BotController extends PlayerController {
     }
 
     public BotController(Difficulty diff) {
-        super(0, 0, 0, 0, 0, 0, 0, 0);   // mã phím vô nghĩa vì mọi hàm đọc phím đã bị override
+        super(0, 0, 0, 0, 0, 0, 0, 0, 0);   // mã phím vô nghĩa vì mọi hàm đọc phím đã bị override
         this.diff = diff;
     }
 
@@ -196,5 +196,6 @@ public class BotController extends PlayerController {
     @Override public boolean isDashPressed()     { return dash; }
     @Override public boolean isSkillUPressed()   { return skillU; }
     @Override public boolean isUltimatePressed() { return ultimate; }
+    @Override public boolean isTransformationPressed() { return false; }
     @Override public boolean isDefendHeld()      { return defendTimer > 0f; }
 }

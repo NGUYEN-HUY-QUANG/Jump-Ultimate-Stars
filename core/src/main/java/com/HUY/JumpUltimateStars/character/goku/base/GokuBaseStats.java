@@ -4,6 +4,7 @@ import com.HUY.JumpUltimateStars.character.stats.CharacterStats;
 import com.HUY.JumpUltimateStars.character.stats.DiveAirSkill;
 import com.HUY.JumpUltimateStars.character.stats.Move;
 import com.HUY.JumpUltimateStars.character.stats.Skill;
+import com.HUY.JumpUltimateStars.character.stats.Transformation;
 
 public class GokuBaseStats extends CharacterStats {
     public GokuBaseStats() {
@@ -19,8 +20,9 @@ public class GokuBaseStats extends CharacterStats {
         airSkillU = new DiveAirSkill("U_AIR", 0.06f, 0.3f, 25, 60f, 1200f, true).energy(10f);
 
         //                  tên  giây/frame  dame/hit  các frame gây dame  cooldown  knockout
-        skillU = new Skill("U", 0.07f, 15, new int[]{3, 4, 5, 6, 7}, 0.3f, false).energy(4f);   // 3 mỗi hit
+        skillU = new Skill("U", 0.07f, 15, new int[]{3, 4, 5, 6, 7}, 0.3f, false).energy(4f).rush(500f, 1000f);   // 3 mỗi hit
 
         ultimate = GokuUltimate::new;
+        transformation = new Transformation("goku_ssj", "transform", 0.1f, 300f);
     }
 }

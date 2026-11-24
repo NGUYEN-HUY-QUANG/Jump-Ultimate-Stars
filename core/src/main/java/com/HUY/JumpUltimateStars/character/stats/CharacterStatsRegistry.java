@@ -1,6 +1,7 @@
 package com.HUY.JumpUltimateStars.character.stats;
 
 import com.HUY.JumpUltimateStars.character.goku.base.GokuBaseStats;
+import com.HUY.JumpUltimateStars.character.goku.ssj.GokuSsjStats;
 import com.HUY.JumpUltimateStars.character.naruto.base.NarutoBaseStats;
 
 import java.util.HashMap;
@@ -14,6 +15,7 @@ public class CharacterStatsRegistry {
     static {
         BY_ID.put("naruto_base", new NarutoBaseStats());
         BY_ID.put("goku_base", new GokuBaseStats());
+        BY_ID.put("goku_ssj", new GokuSsjStats());
     }
 
     /** Chưa đăng ký thì dùng DefaultStats, không crash. */
