@@ -242,6 +242,23 @@ public class GameScreen implements Screen {
         lastEnergy[i] = f.getEnergy();
     }
 
+    /** Hai nhân vật không được chồng lên nhau. Nhảy qua đầu hoặc lướt thì qua được. */
+    private void separateFighters() {
+        if (fighter2 == null) return;
+        if (fighter1.isPhasing() || fighter2.isPhasing()) return;
+
+        // Khác độ cao (nhảy qua đầu) thì không chặn
+        if (Math.abs(fighter1.getFeetY() - fighter2.getFeetY()) >= fighter1.getBodyHeight()) return;
+
+        float dx = fighter2.getCenterX() - fighter1.getCenterX();
+        float overlap = (fighter1.getBodyWidth() + fighter2.getBodyWidth()) / 2f - Math.abs(dx);
+        if (overlap <= 0f) return;
+
+        float dir = dx >= 0f ? 1f : -1f;   // hướng từ P1 sang P2
+        fighter1.pushX(-dir * overlap / 2f);
+        fighter2.pushX(dir * overlap / 2f);
+    }
+
     @Override
     public void render(float delta) {
         // --- Luồng round ---
@@ -285,6 +302,7 @@ public class GameScreen implements Screen {
         // --- Cập nhật ---
         if (!dark || darkCaster == fighter1) fighter1.update(delta, worldW);
         if (fighter2 != null && (!dark || darkCaster == fighter2)) fighter2.update(delta, worldW);
+        separateFighters();   // Fighter update xong mới biết vị trí cuối -> tách nhau ra
 
         // Phát hiện ai vừa bắt đầu ultimate
         boolean u1 = fighter1.isUsingUltimate();
