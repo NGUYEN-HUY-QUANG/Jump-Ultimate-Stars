@@ -25,24 +25,20 @@ import java.util.List;
 
 /**
  * Man hinh chon nhan vat (character select).
- * Bo cuc man hinh chia lam 3 cot: trai (preview P1) - giua (danh sach nhan vat) - phai (preview P2).
+ * Bo cuc: trai (preview P1) - giua (danh sach nhan vat) - phai (preview P2).
  *
- * Ho tro 2 che do:
- *  - Mode.SINGLE: chi P1 duoc chon (dung cho PVE, Luyen tap, va Vuot ai sau nay)
- *  - Mode.DUO:    ca P1 va P2 cung chon (dung cho PVP)
+ * 3 che do:
+ *  - PVP:      2 nguoi that, moi nguoi 1 bo phim, chon cung luc.
+ *  - PVE:      1 nguoi choi (P1). P1 chon xong thi P2 (bot) hien ra de P1 chon tiep
+ *              (P2 dung chung phim cua P1).
+ *  - TRAINING: giong PVP (2 nguoi that), khac nhau o trong tran.
  *
- * Chon xong thi sang MapSelectScreen (chon map), roi moi vao GameScreen.
- *
- * Moi nguoi choi (P1/P2) duoc dai dien boi 1 PlayerSelector (xem package hethong),
- * gom index dang chon + preview + phim dieu khien rieng. Man hinh nay chi dong vai
- * tro dieu phoi: giu danh sach slot + danh sach PlayerSelector, dong bo trang thai
- * CharacterSlot theo tung nguoi choi, va ve them tam giac + chu "P1"/"P2" phia tren
- * slot dang duoc tro toi.
+ * Chon xong thi sang MapSelectScreen, roi moi vao GameScreen.
  */
 public class CharacterSelectScreen implements Screen {
 
-    /** Che do man hinh: chi P1 hay ca P1+P2. */
-    public enum Mode { SINGLE, DUO }
+    /** Che do: PVP (2 nguoi), PVE (1 nguoi + bot), TRAINING (2 nguoi, hp/energy luon day). */
+    public enum Mode { PVP, PVE, TRAINING }
 
     private final MainGame game;
     private final Mode mode;
@@ -58,8 +54,6 @@ public class CharacterSelectScreen implements Screen {
 
     private final List<CharacterSlot> slots = new ArrayList<>();
 
-    // Luu rieng vi tri tung slot (CharacterSlot khong expose getX()/getY())
-    // de ve tam giac/label dung cho slot tuong ung.
     private float[] slotX;
     private float[] slotY;
 
@@ -72,32 +66,25 @@ public class CharacterSelectScreen implements Screen {
 
     private CharacterAnimationManager animManager;
 
-    // Danh sach nguoi choi active: SINGLE = chi P1, DUO = P1 + P2
+    // Nguoi choi dang active. PVE: luc dau chi co P1, P2 duoc add sau khi P1 confirm
     private final List<PlayerSelector> players = new ArrayList<>();
     private PlayerSelector p1;
-    private PlayerSelector p2; // null khi Mode.SINGLE
+    private PlayerSelector p2;
 
     private static final float PREVIEW_BASELINE_Y = 200f;
     private static final float P1_OFFSET_X = 60f;
     private static final float P2_OFFSET_X = -60f;
 
-    // Mau P1/P2 (tam thoi, se custom lai sau)
     private static final Color P1_COLOR = new Color(0.2f, 0.55f, 1f, 1f); // xanh duong
     private static final Color P2_COLOR = new Color(1f, 0.25f, 0.25f, 1f); // do
 
-    private static final float INDICATOR_GAP = 6f;    // khoang cach tu dinh slot toi tam giac
+    private static final float INDICATOR_GAP = 6f;
     private static final float TRIANGLE_SIZE = 10f;
-    private static final float LABEL_SAME_SLOT_OFFSET = 22f; // P1/P2 cung slot -> tach sang 2 ben
+    private static final float LABEL_SAME_SLOT_OFFSET = 22f;
 
     public CharacterSelectScreen(MainGame game, Mode mode) {
         this.game = game;
         this.mode = mode;
-    }
-
-    // Constructor cu, mac dinh SINGLE, de cho cac cho con dang goi
-    // CharacterSelectScreen(game) khong bi loi bien dich.
-    public CharacterSelectScreen(MainGame game) {
-        this(game, Mode.SINGLE);
     }
 
     @Override
@@ -132,7 +119,13 @@ public class CharacterSelectScreen implements Screen {
             Keys.A, Keys.D, Keys.J, false, P1_OFFSET_X, animManager);
         players.add(p1);
 
-        if (mode == Mode.DUO) {
+        if (mode == Mode.PVE) {
+            // P2 la bot nhung do P1 chon nen dung chung phim cua P1.
+            // CHUA add vao players, chi add sau khi P1 confirm xong (xem checkAllConfirmed)
+            p2 = new PlayerSelector(PlayerSelector.Id.P2, P2_COLOR,
+                Keys.A, Keys.D, Keys.J, true, P2_OFFSET_X, animManager);
+        } else {
+            // PVP va TRAINING: 2 nguoi that, moi nguoi 1 bo phim
             p2 = new PlayerSelector(PlayerSelector.Id.P2, P2_COLOR,
                 Keys.LEFT, Keys.RIGHT, Keys.NUM_1, true, P2_OFFSET_X, animManager);
             players.add(p2);
@@ -145,11 +138,6 @@ public class CharacterSelectScreen implements Screen {
         updateSlotHighlights();
     }
 
-    /**
-     * Tinh toan va gan vi tri (x, y) cho tung slot nhan vat o cot giua,
-     * canh giua theo chieu ngang trong vung MID_RATIO cua man hinh.
-     * Duoc goi lai moi khi resize() man hinh.
-     */
     private void layoutSlots() {
         float screenW = Gdx.graphics.getWidth();
         float screenH = Gdx.graphics.getHeight();
@@ -182,12 +170,6 @@ public class CharacterSelectScreen implements Screen {
 
     /* ========================= INPUT ========================= */
 
-    /**
-     * Xu ly di chuyen + xac nhan cho tat ca nguoi choi active.
-     * KHONG check "da confirm het chua" o day - viec do can chay SAU khi
-     * CharacterSlot.update() da chay trong frame nay (xem render()),
-     * vi CONFIRMING co the vua tu chuyen thanh CONFIRMED ngay trong frame do.
-     */
     private void handleInput() {
         for (PlayerSelector p : players) {
             if (p.handleMove(slots)) {
@@ -196,8 +178,6 @@ public class CharacterSelectScreen implements Screen {
             }
             if (p.isConfirmPressed() && !p.isLocked()) {
                 p.startConfirm();
-                // Slot chi de hien thi hieu ung. Neu slot da dang nhap nhay/do
-                // (do nguoi kia confirm truoc) thi giu nguyen, khong reset.
                 CharacterSlot slot = slots.get(p.getIndex());
                 if (slot.getState() != CharacterSlot.State.CONFIRMING
                     && slot.getState() != CharacterSlot.State.CONFIRMED) {
@@ -208,8 +188,6 @@ public class CharacterSelectScreen implements Screen {
         updateSlotHighlights();
     }
 
-    // Dong bo trang thai SELECTED cua slot theo vi tri hien tai cua tung
-    // nguoi choi, khong dong vao slot dang CONFIRMING/CONFIRMED.
     private void updateSlotHighlights() {
         for (CharacterSlot s : slots) {
             if (s.getState() == CharacterSlot.State.SELECTED) {
@@ -225,15 +203,25 @@ public class CharacterSelectScreen implements Screen {
     }
 
     /**
-     * Kiem tra tat ca nguoi choi active da CONFIRMED hay chua.
-     * Neu roi thi chuyen sang MapSelectScreen (chon map) kem id nhan vat da chon.
+     * PVE: P1 confirm xong thi cho P2 (bot) hien ra de P1 chon tiep, chua chuyen man hinh.
+     * Con lai: tat ca nguoi choi active da CONFIRMED thi sang MapSelectScreen.
      */
     private boolean checkAllConfirmed() {
+        if (mode == Mode.PVE && !players.contains(p2)) {
+            if (p1.isConfirmed()) {
+                players.add(p2);
+                p2.refreshPreview(slots);
+                repositionPreviews();
+                updateSlotHighlights();
+            }
+            return false;   // chua xong, con phai cho P2
+        }
+
         for (PlayerSelector p : players) {
             if (!p.isConfirmed()) return false;
         }
         String p1Id = slots.get(p1.getIndex()).getData().id;
-        String p2Id = (p2 != null) ? slots.get(p2.getIndex()).getData().id : null;
+        String p2Id = slots.get(p2.getIndex()).getData().id;
 
         game.setScreen(new MapSelectScreen(game, mode, p1Id, p2Id));
         dispose();
@@ -246,8 +234,6 @@ public class CharacterSelectScreen implements Screen {
     public void render(float delta) {
         handleInput();
 
-        // update slot TRUOC checkAllConfirmed(), vi CONFIRMING co the vua
-        // tu chuyen thanh CONFIRMED ngay trong lan update nay.
         for (CharacterSlot s : slots) s.update(delta);
         for (PlayerSelector p : players) p.update(delta);
 
@@ -258,19 +244,16 @@ public class CharacterSelectScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         shapeRenderer.setProjectionMatrix(camera.combined);
 
-        // Lop 1: nen
         batch.begin();
         batch.draw(backgroundTexture, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.end();
 
-        // Lop 2: glow + border cua slot + tam giac chi P1/P2
         shapeRenderer.begin(ShapeType.Filled);
         for (CharacterSlot s : slots) s.renderGlow(shapeRenderer);
         for (CharacterSlot s : slots) s.renderBorder(shapeRenderer);
         renderIndicatorTriangles();
         shapeRenderer.end();
 
-        // Lop 3: avatar + preview P1/P2 + chu "P1"/"P2"
         batch.begin();
         for (CharacterSlot s : slots) s.renderAvatar(batch);
         for (PlayerSelector p : players) p.draw(batch);
@@ -278,7 +261,6 @@ public class CharacterSelectScreen implements Screen {
         batch.end();
     }
 
-    /** Ve tam giac chi xuong dau slot ma tung nguoi choi dang tro toi. */
     private void renderIndicatorTriangles() {
         for (PlayerSelector p : players) {
             int i = p.getIndex();
@@ -286,7 +268,6 @@ public class CharacterSelectScreen implements Screen {
             float topY = slotY[i] + SLOT_SIZE;
 
             shapeRenderer.setColor(p.getColor());
-            // tam giac huong XUONG, dinh nam sat tren canh tren cua slot
             shapeRenderer.triangle(
                 cx - TRIANGLE_SIZE / 2f, topY + INDICATOR_GAP + TRIANGLE_SIZE,
                 cx + TRIANGLE_SIZE / 2f, topY + INDICATOR_GAP + TRIANGLE_SIZE,
@@ -295,7 +276,6 @@ public class CharacterSelectScreen implements Screen {
         }
     }
 
-    /** Ve chu "P1"/"P2" phia tren tam giac, ngay tren slot dang duoc tro toi. */
     private void renderIndicatorLabels() {
         for (PlayerSelector p : players) {
             int i = p.getIndex();
@@ -310,9 +290,9 @@ public class CharacterSelectScreen implements Screen {
         }
     }
 
-    // P1 va P2 cung tro vao 1 slot -> tach label/tam giac sang 2 ben de khong de len nhau.
+    // P1 va P2 cung tro 1 slot -> tach sang 2 ben. P2 chua hien (PVE) thi khong can tach.
     private float getIndicatorXOffset(PlayerSelector p) {
-        if (p2 == null || p1.getIndex() != p2.getIndex()) return 0f;
+        if (!players.contains(p2) || p1.getIndex() != p2.getIndex()) return 0f;
         return p == p1 ? -LABEL_SAME_SLOT_OFFSET : LABEL_SAME_SLOT_OFFSET;
     }
 
@@ -323,12 +303,9 @@ public class CharacterSelectScreen implements Screen {
         layoutSlots();
     }
 
-    @Override
-    public void pause() {}
-    @Override
-    public void resume() {}
-    @Override
-    public void hide() {}
+    @Override public void pause() {}
+    @Override public void resume() {}
+    @Override public void hide() {}
 
     @Override
     public void dispose() {

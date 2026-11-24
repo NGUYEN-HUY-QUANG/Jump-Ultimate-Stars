@@ -40,7 +40,7 @@ public class MainScreen implements Screen {
     private final String[] menuItems = {
         "PVP",
         "PVE",
-        "VƯỢT ẢI",
+        "VÔ TẬN",
         "LUYỆN TẬP",
         "THOÁT"
     };
@@ -342,23 +342,18 @@ public class MainScreen implements Screen {
         switch (index) {
             case 0:
                 System.out.println("CHON PVP");
-                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.DUO));
+                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.PVP));
                 break;
-
             case 1:
                 System.out.println("CHON PVE");
-                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.SINGLE));
+                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.PVE));
                 break;
-
             case 2:
-                System.out.println("CHON VƯỢT ẢI");
-                // TODO: sau nay se la new CharacterSelectScreen(game, CharacterSelectScreen.Mode.SINGLE)
-                // roi chuyen tiep sang man hinh gameplay rieng cho Vuot Ai, khac voi PVE/Luyen tap
+                System.out.println("CHON VÔ TẬN");
                 break;
-
             case 3:
                 System.out.println("CHON LUYỆN TẬP");
-                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.SINGLE));
+                game.setScreen(new CharacterSelectScreen(game, CharacterSelectScreen.Mode.TRAINING));
                 break;
 
             case 4:

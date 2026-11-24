@@ -170,6 +170,20 @@ public class MapData {
         return false;
     }
 
+    /**
+     * Platform ở độ cao y mà x đang nằm trong nó: trả {xTrái, xPhải} (pixel thế giới).
+     * Không đứng trên platform nào thì trả null.
+     */
+    public float[] getPlatformRange(float x, float y) {
+        for (float[] p : info.platforms) {
+            float left = p[0] * info.scale, right = p[1] * info.scale;
+            if (Math.abs(worldY(p[2]) - y) < 0.5f && x >= left && x <= right) {
+                return new float[] { left, right };
+            }
+        }
+        return null;
+    }
+
     /** Đổi điểm thế giới sang pixel ảnh (gốc dưới-trái) để in debug. Trả về {x, y}. */
     public float[] worldToImagePixel(float wx, float wy) {
         return new float[] { wx / info.scale, wy / info.scale };

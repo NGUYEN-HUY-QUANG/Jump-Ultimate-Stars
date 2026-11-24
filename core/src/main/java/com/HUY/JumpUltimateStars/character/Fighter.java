@@ -1067,6 +1067,15 @@ public class Fighter {
         return hp;
     }
 
+    public int getMaxHp() {
+        return stats.maxHp;
+    }
+
+    /** Hồi đầy máu (dùng cho chế độ luyện tập). */
+    public void restoreHp() {
+        hp = stats.maxHp;
+    }
+
     /** Cộng energy (tự kẹp 0..max). Số âm = trừ (dùng cho ultimate). */
     public void addEnergy(float amount) {
         float max = CharacterStats.ENERGY_PER_BAR * CharacterStats.MAX_ENERGY_BARS;
