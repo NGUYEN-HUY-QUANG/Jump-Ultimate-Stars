@@ -98,7 +98,8 @@ class AuthControllerTests {
 
 		postJson("/api/auth/change-password",
 				"{\"username\":\"player_01\",\"currentPassword\":\"saimatkhau\",\"newPassword\":\"matkhau456\"}")
-				.andExpect(status().isBadRequest());
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Mật khẩu hiện tại không đúng."));
 		postJson("/api/auth/change-password",
 				"{\"username\":\"player_01\",\"currentPassword\":\"matkhau123\",\"newPassword\":\"matkhau123\"}")
 				.andExpect(status().isBadRequest())

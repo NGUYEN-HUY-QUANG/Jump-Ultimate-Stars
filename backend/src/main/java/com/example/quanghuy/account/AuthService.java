@@ -42,7 +42,12 @@ public class AuthService {
 	}
 
 	public void changePassword(String rawUsername, String currentPassword, String newPassword) {
-		Account account = login(rawUsername, currentPassword);
+		Account account;
+		try {
+			account = login(rawUsername, currentPassword);
+		} catch (AuthException exception) {
+			throw new AuthException("Mật khẩu hiện tại không đúng.");
+		}
 		validatePassword(newPassword);
 		if (passwordEncoder.matches(newPassword, account.getPasswordHash())) {
 			throw new AuthException("Mật khẩu mới phải khác mật khẩu hiện tại.");

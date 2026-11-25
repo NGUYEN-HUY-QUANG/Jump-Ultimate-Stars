@@ -9,16 +9,9 @@ Repo gồm hai phần tách riêng:
 
 Mở từng thư mục như một project riêng trong IDE (IntelliJ: *File → Open* rồi chọn `game` hoặc `backend`).
 
-## Chạy game
+## 1. Bật backend
 
-```powershell
-cd game
-.\gradlew.bat lwjgl3:run
-```
-
-## Chạy backend
-
-Chạy thử không cần MySQL:
+Game mở vào màn hình đăng nhập, nên phải bật backend trước. Chạy thử không cần MySQL:
 
 ```powershell
 cd backend
@@ -26,3 +19,14 @@ cd backend
 ```
 
 Chạy với MySQL và danh sách API: xem [`backend/README.md`](backend/README.md).
+
+## 2. Chạy game
+
+Mở một cửa sổ PowerShell khác:
+
+```powershell
+cd game
+.\gradlew.bat lwjgl3:run
+```
+
+Trong game: đăng nhập hoặc tạo tài khoản mới, vào menu chính; mục **ĐỔI MẬT KHẨU** và **ĐĂNG XUẤT** nằm trong menu. Game gọi backend ở `http://localhost:8080`, đổi trong `AuthClient.SERVER_URL` nếu backend chạy chỗ khác.

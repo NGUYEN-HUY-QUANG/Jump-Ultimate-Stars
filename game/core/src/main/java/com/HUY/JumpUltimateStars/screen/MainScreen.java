@@ -42,8 +42,13 @@ public class MainScreen implements Screen {
         "PVE",
         "VÔ TẬN",
         "LUYỆN TẬP",
+        "ĐỔI MẬT KHẨU",
+        "ĐĂNG XUẤT",
         "THOÁT"
     };
+
+    // Dòng "Người chơi: ..." góc trên trái, tạo 1 lần trong show() cho đỡ rác mỗi frame
+    private String playerText;
 
     /*
      * === CO CHE CUON VO HAN (infinite scroll) ===
@@ -130,6 +135,8 @@ public class MainScreen implements Screen {
         centerX = Gdx.graphics.getWidth() / 2f;
         // Menu dat lech xuong duoi tam man hinh 100px cho thoang,
         centerY = Gdx.graphics.getHeight() / 2f - 100f;
+
+        playerText = game.getLoggedInUser() != null ? "Người chơi: " + game.getLoggedInUser() : null;
     }
 
     /**
@@ -141,6 +148,12 @@ public class MainScreen implements Screen {
     @Override
     public void render(float delta) {
         handleInput();
+        // Vua chuyen sang man hinh khac -> giai phong tai nguyen va dung ve,
+        // tranh moi lan quay lai menu lai ro ri 1 bo texture + font
+        if (game.getScreen() != this) {
+            dispose();
+            return;
+        }
         updateAnimation(delta);
 
         // Xoa man hinh voi mau den truoc khi ve frame moi
@@ -156,6 +169,11 @@ public class MainScreen implements Screen {
 
         // Ve menu de len tren background
         renderMenu();
+
+        if (playerText != null) {
+            font.setColor(Color.WHITE);
+            font.draw(batch, playerText, 20f, Gdx.graphics.getHeight() - 20f);
+        }
 
         batch.end();
     }
@@ -357,6 +375,13 @@ public class MainScreen implements Screen {
                 break;
 
             case 4:
+                game.setScreen(new AuthScreen(game, AuthScreen.Mode.CHANGE_PASSWORD));
+                break;
+            case 5:
+                game.setLoggedInUser(null);
+                game.setScreen(new AuthScreen(game, AuthScreen.Mode.LOGIN));
+                break;
+            case 6:
                 System.out.println("CHON THOAT");
                 Gdx.app.exit();
                 break;
