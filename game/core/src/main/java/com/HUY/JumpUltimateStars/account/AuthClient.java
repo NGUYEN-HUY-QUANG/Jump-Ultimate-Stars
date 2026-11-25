@@ -21,7 +21,7 @@ import com.badlogic.gdx.utils.JsonWriter;
 public class AuthClient {
 
     /** Địa chỉ backend. Đổi ở đây nếu backend chạy ở máy hoặc cổng khác. */
-    public static final String SERVER_URL = "http://localhost:8080";
+    public static final String SERVER_URL = "http://127.0.0.1:8080";
 
     private static final int TIMEOUT_MS = 5000;
 
